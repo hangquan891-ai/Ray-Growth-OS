@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ray Growth OS</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">X Helper</p>
+        <h1>Ray Growth OS</h1>
+        <p class="muted">从 App 打开原帖后，插件会监听你在 X 发出的回复，并尽量自动回写公开反馈。</p>
+      </header>
+
+      <section class="panel">
+        <label for="handle">你的 X 用户名</label>
+        <div class="row">
+          <input id="handle" placeholder="例如 Ray_Codeproxy" />
+          <button id="saveHandle" type="button">保存</button>
+        </div>
+        <p class="hint">这里填 @ 后面的用户名，不是展示名。也可以在 App 设置里保存 X 主页，读取队列时会自动同步。</p>
+      </section>
+
+      <section class="stats">
+        <div><b id="queueCount">0</b><span>队列</span></div>
+        <div><b id="pendingCount">0</b><span>已关联</span></div>
+        <div><b id="updateCount">0</b><span>待回写</span></div>
+      </section>
+
+      <section id="scanProgress" class="progress" hidden>
+        <div class="progress-head">
+          <span id="scanProgressTitle">巡检进度</span>
+          <b id="scanProgressCount">0/0</b>
+        </div>
+        <div class="progress-track"><span id="scanProgressBar"></span></div>
+        <p id="scanProgressText">准备开始。</p>
+      </section>
+
+      <section class="actions">
+        <button id="syncApp" type="button">从 App 读取队列</button>
+        <button id="scanX" type="button">手动补扫当前 X 页面</button>
+        <button id="refreshReplies" type="button">巡检已保存回复链接</button>
+        <button id="applyApp" type="button">手动回写暂存反馈</button>
+      </section>
+
+      <p id="status" class="status">先读取 App 队列；从 App 打开原帖并在 X 回复后，插件会保存回复链接，再用于巡检反馈。</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

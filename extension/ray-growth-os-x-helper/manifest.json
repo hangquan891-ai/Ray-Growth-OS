@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Ray Growth OS X Helper",
+  "version": "0.1.5",
+  "description": "把 Ray Growth OS 的互动队列和已登录的 X 页面连接起来，自动记录回复链接和公开反馈。",
+  "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "http://localhost:3001/*",
+    "http://127.0.0.1:3000/*",
+    "http://127.0.0.1:3001/*",
+    "https://x.com/*",
+    "https://twitter.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Ray Growth OS",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://localhost:3001/*",
+        "http://127.0.0.1:3000/*",
+        "http://127.0.0.1:3001/*"
+      ],
+      "js": ["app-bridge.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["x-bridge.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

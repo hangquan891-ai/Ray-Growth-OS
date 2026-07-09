@@ -1,0 +1,523 @@
+const APP_URLS = [
+  "http://localhost:3000/*",
+  "http://localhost:3001/*",
+  "http://127.0.0.1:3000/*",
+  "http://127.0.0.1:3001/*",
+];
+
+const REPLY_SCAN_BATCH_SIZE = 20;
+const REPLY_SCAN_PAGE_SIZE = 50;
+
+function clean(value) {
+  return String(value || "").trim();
+}
+
+function normalizeUsername(value) {
+  return clean(value).replace(/^@+/, "").toLowerCase();
+}
+
+function normalizeUrl(value) {
+  const raw = clean(value);
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_|ref$|s$|t$|mx$)/i.test(key)) url.searchParams.delete(key);
+    }
+    const query = url.searchParams.toString();
+    return `${url.origin.toLowerCase()}${url.pathname.replace(/\/$/, "")}${query ? `?${query}` : ""}`;
+  } catch {
+    return raw;
+  }
+}
+
+function statusKeyFromUrl(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (host !== "x.com" && host !== "twitter.com") return "";
+    const parts = url.pathname.split("/").filter(Boolean);
+    const statusIndex = parts.findIndex((part) => part === "status" || part === "statuses");
+    if (statusIndex <= 0) return "";
+    const username = normalizeUsername(parts[0]);
+    const statusId = parts[statusIndex + 1] || "";
+    return /^\d+$/.test(statusId) ? `${username}/${statusId}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function sameStatusUrl(left, right) {
+  const leftKey = statusKeyFromUrl(left);
+  const rightKey = statusKeyFromUrl(right);
+  if (leftKey && rightKey) return leftKey === rightKey;
+  return Boolean(normalizeUrl(left) && normalizeUrl(left) === normalizeUrl(right));
+}
+
+function normalizeText(value) {
+  return clean(value).replace(/\s+/g, " ").toLowerCase();
+}
+
+function storageGet(keys) {
+  return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
+}
+
+function storageSet(value) {
+  return new Promise((resolve) => chrome.storage.local.set(value, resolve));
+}
+
+function storageRemove(keys) {
+  return new Promise((resolve) => chrome.storage.local.remove(keys, resolve));
+}
+
+function queryTabs(query) {
+  return new Promise((resolve) => chrome.tabs.query(query, resolve));
+}
+
+function createTab(options) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.create(options, (tab) => {
+      const error = chrome.runtime.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve(tab);
+    });
+  });
+}
+
+function removeTab(tabId) {
+  return new Promise((resolve) => {
+    if (!tabId) return resolve(false);
+    chrome.tabs.remove(tabId, () => resolve(true));
+  });
+}
+
+function waitForTabComplete(tabId, timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(true);
+    };
+    const listener = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === "complete") cleanup();
+    };
+    const timer = setTimeout(cleanup, timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+function sendToTab(tabId, message) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      const error = chrome.runtime.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve(response);
+    });
+  });
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isMissingReceiverError(error) {
+  return /receiving end does not exist|could not establish connection/i.test(error?.message || "");
+}
+
+function friendlyError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (isMissingReceiverError({ message })) {
+    return "插件暂时没连上页面脚本。我已尝试自动注入；如果仍失败，请刷新 App 或 X 页面后再试。";
+  }
+  return message || "操作失败。";
+}
+
+function executeScript(tabId, file) {
+  return new Promise((resolve, reject) => {
+    chrome.scripting.executeScript({ target: { tabId }, files: [file] }, () => {
+      const error = chrome.runtime.lastError;
+      if (error) reject(new Error(error.message));
+      else resolve(true);
+    });
+  });
+}
+
+async function sendToTabWithInjection(tab, message, file) {
+  try {
+    return await sendToTab(tab.id, message);
+  } catch (error) {
+    if (!isMissingReceiverError(error)) throw error;
+    await executeScript(tab.id, file);
+    await delay(150);
+    return await sendToTab(tab.id, message);
+  }
+}
+
+function isValidXUsername(username) {
+  return /^[a-z0-9_]{1,15}$/.test(normalizeUsername(username));
+}
+
+async function findAppTab() {
+  const tabs = await queryTabs({ url: APP_URLS });
+  return tabs.find((tab) => tab.id) || null;
+}
+
+function signalKey(item) {
+  return clean(item.itemId) || normalizeUrl(item.url || item.sourceUrl) || `${clean(item.mode)}:${clean(item.author)}:${normalizeText(item.text).slice(0, 80)}`;
+}
+
+function findQueueItemBySource(queue, url) {
+  return queue.find((item) => sameStatusUrl(item.sourceUrl || item.url, url)) || null;
+}
+
+function findQueueItemByKey(queue, itemId) {
+  return queue.find((item) => signalKey(item) === itemId) || null;
+}
+
+function classifyMetrics(metrics = {}) {
+  const replies = Number(metrics.replies || 0);
+  const reposts = Number(metrics.reposts || 0);
+  const quotes = Number(metrics.quotes || 0);
+  if (replies > 0) return { feedback: "got_reply", reason: `你的回复下面检测到 ${replies} 条公开回复。` };
+  if (reposts + quotes > 0) return { feedback: "reshared", reason: `你的回复被引用/转发 ${reposts + quotes} 次。` };
+  return { feedback: "no_reply", reason: "这条回复暂时没有检测到后续公开回复。" };
+}
+
+function chooseOwnReply(articles, item) {
+  const sourceUrl = item.sourceUrl || item.url;
+  const usedDraft = normalizeText(item.usedDraft || "");
+  const candidates = articles.filter((article) => normalizeUrl(article.url) && !sameStatusUrl(article.url, sourceUrl));
+  if (usedDraft.length >= 16) {
+    const snippet = usedDraft.slice(0, Math.min(56, usedDraft.length));
+    const matched = candidates.find((article) => normalizeText(article.text).includes(snippet));
+    if (matched) return matched;
+  }
+  return candidates[candidates.length - 1] || null;
+}
+
+function buildUpdate(item, article, source) {
+  const classified = classifyMetrics(article.metrics);
+  const now = new Date().toISOString();
+  return {
+    itemId: signalKey(item),
+    mode: item.mode,
+    sourceUrl: item.sourceUrl || item.url,
+    replyUrl: article.url,
+    replyUrlAt: item.replyUrlAt || now,
+    feedback: classified.feedback,
+    feedbackAt: now,
+    feedbackReason: classified.reason,
+    metrics: article.metrics || {},
+    source,
+  };
+}
+
+async function saveUpdate(update) {
+  const stored = await storageGet(["rayUpdates"]);
+  const updates = stored.rayUpdates || {};
+  updates[update.itemId] = { ...(updates[update.itemId] || {}), ...update };
+  await storageSet({ rayUpdates: updates });
+  return update;
+}
+
+async function rememberSourceFromApp(item, url) {
+  const sourceUrl = normalizeUrl(url || item?.sourceUrl || item?.url);
+  if (!sourceUrl || !statusKeyFromUrl(sourceUrl)) {
+    return { ok: false, message: "这个链接不是有效的 X 原帖链接。" };
+  }
+
+  const preparedItem = {
+    ...(item || {}),
+    itemId: signalKey(item || { url: sourceUrl }),
+    sourceUrl,
+    url: sourceUrl,
+  };
+  const stored = await storageGet(["rayQueue"]);
+  const queue = Array.isArray(stored.rayQueue) ? stored.rayQueue : [];
+  const itemId = signalKey(preparedItem);
+  const exists = queue.some((candidate) => signalKey(candidate) === itemId || sameStatusUrl(candidate.sourceUrl || candidate.url, sourceUrl));
+  const nextQueue = exists
+    ? queue.map((candidate) => (signalKey(candidate) === itemId || sameStatusUrl(candidate.sourceUrl || candidate.url, sourceUrl) ? { ...candidate, ...preparedItem } : candidate))
+    : [preparedItem, ...queue];
+
+  await storageSet({
+    rayQueue: nextQueue,
+    rayRecentSource: { itemId, sourceUrl, savedAt: new Date().toISOString() },
+  });
+
+  return { ok: true, message: "已记住这条原帖。你在 X 点回复发布后，插件会自动扫描并回写。" };
+}
+
+function shouldCaptureFreshReply(scan) {
+  return scan?.trigger === "reply-click";
+}
+
+async function processScan(scan, tabId) {
+  const stored = await storageGet(["rayQueue", "rayPendingByTab", "raySelfUsername", "rayRecentSource"]);
+  const queue = Array.isArray(stored.rayQueue) ? stored.rayQueue : [];
+  const selfUsername = normalizeUsername(stored.raySelfUsername);
+  const pendingByTab = stored.rayPendingByTab || {};
+  const currentUrl = normalizeUrl(scan?.current?.url || scan?.url);
+
+  if (!queue.length) return { ok: false, message: "插件还没有读取 App 队列。请先在插件里点一次“从 App 读取队列”。" };
+  if (!selfUsername) return { ok: false, message: "请先保存你的 X 用户名，例如 Ray_Codeproxy，不是展示名。" };
+
+  let sourceMatch = findQueueItemBySource(queue, currentUrl);
+  const recentSource = stored.rayRecentSource || null;
+  if (!sourceMatch && recentSource?.sourceUrl && sameStatusUrl(recentSource.sourceUrl, currentUrl)) {
+    sourceMatch = findQueueItemByKey(queue, recentSource.itemId) || findQueueItemBySource(queue, recentSource.sourceUrl);
+  }
+
+  if (sourceMatch && tabId) {
+    pendingByTab[String(tabId)] = {
+      itemId: signalKey(sourceMatch),
+      sourceUrl: sourceMatch.sourceUrl || sourceMatch.url,
+      savedAt: new Date().toISOString(),
+    };
+    await storageSet({ rayPendingByTab: pendingByTab });
+  }
+
+  const articles = Array.isArray(scan?.articles) ? scan.articles : [];
+  const ownArticles = articles.filter((article) => normalizeUsername(article.username) === selfUsername && normalizeUrl(article.url));
+  const updates = [];
+
+  const pending = tabId ? pendingByTab[String(tabId)] : null;
+  const pendingItem = pending ? findQueueItemByKey(queue, pending.itemId) : null;
+  if (pendingItem && shouldCaptureFreshReply(scan)) {
+    const ownReply = chooseOwnReply(ownArticles, pendingItem);
+    if (ownReply) updates.push(await saveUpdate(buildUpdate(pendingItem, ownReply, "x-reply-after-post")));
+  }
+
+  for (const item of queue) {
+    const replyUrl = normalizeUrl(item.replyUrl);
+    if (!replyUrl) continue;
+    const article = ownArticles.find((candidate) => sameStatusUrl(candidate.url, replyUrl)) || (sameStatusUrl(currentUrl, replyUrl) ? scan.current : null);
+    if (article) updates.push(await saveUpdate(buildUpdate(item, article, "x-saved-reply-scan")));
+  }
+
+  const autoApply = updates.length ? await tryAutoApplyUpdatesToApp() : null;
+  const appliedCount = autoApply?.ok ? Number(autoApply.appliedCount || updates.length) : 0;
+  const message = appliedCount > 0
+    ? `已识别并自动回写 ${appliedCount} 条反馈到 App。`
+    : updates.length
+      ? `已识别 ${updates.length} 条回复/反馈，但 App 页面暂时没连上，已先暂存。`
+      : sourceMatch
+        ? "已关联当前原帖。等你在 X 点回复发布后，插件会自动扫描。"
+        : "当前 X 页面没有匹配到队列条目。";
+
+  return {
+    ok: true,
+    sourceMatched: Boolean(sourceMatch),
+    captured: updates.length,
+    appliedCount,
+    message,
+  };
+}
+
+async function syncFromApp() {
+  const tab = await findAppTab();
+  if (!tab?.id) throw new Error("请先打开 Ray Growth OS 页面。通常是 http://localhost:3001 或 http://127.0.0.1:3001");
+  const response = await sendToTabWithInjection(tab, { type: "RAY_READ_WORKBENCH" }, "app-bridge.js");
+  if (!response?.ok) throw new Error(response?.message || "读取 App 队列失败。请刷新 App 页面后重试。");
+  const stored = await storageGet(["raySelfUsername"]);
+  await storageSet({ rayQueue: response.queue || [], raySelfUsername: response.selfUsername || stored.raySelfUsername || "", rayReplyScanCursor: 0 });
+  return { ...response, message: `已读取 ${response.queue?.length || 0} 条队列。` };
+}
+
+async function scanCurrentXTab() {
+  const [tab] = await queryTabs({ active: true, currentWindow: true });
+  if (!tab?.id || !/^https:\/\/(x|twitter)\.com\//i.test(tab.url || "")) throw new Error("请先切到 X 页面再扫描。");
+  const scan = await sendToTabWithInjection(tab, { type: "RAY_SCAN_X_NOW" }, "x-bridge.js");
+  if (!scan?.ok) throw new Error(scan?.message || "扫描当前 X 页面失败。请等待页面加载完再试。");
+  return processScan(scan, tab.id);
+}
+
+async function setReplyScanProgress(progress) {
+  await storageSet({ rayReplyScanProgress: { updatedAt: new Date().toISOString(), ...progress } });
+}
+
+async function refreshSavedReplies() {
+  const stored = await storageGet(["rayQueue", "rayReplyScanProgress"]);
+  if (stored.rayReplyScanProgress?.active) {
+    return { ok: false, message: "巡检正在进行中，请看下方进度。" };
+  }
+
+  const queue = Array.isArray(stored.rayQueue) ? stored.rayQueue : [];
+  const targets = [];
+  let repliedWithoutReplyUrl = 0;
+  const seen = new Set();
+  for (const item of queue) {
+    const replyUrl = normalizeUrl(item.replyUrl);
+    const status = clean(item.status || item.processedAction);
+    if (!replyUrl) {
+      if (status === "replied" || status === "quoted") repliedWithoutReplyUrl += 1;
+      continue;
+    }
+    const key = statusKeyFromUrl(replyUrl) || replyUrl;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    targets.push({ ...item, replyUrl });
+  }
+
+  if (!targets.length) {
+    const statusHint = repliedWithoutReplyUrl ? "检测到 " + repliedWithoutReplyUrl + " 条已标记已回复，但没有保存回复链接；巡检无法知道哪条是你的回复。" : "";
+    return { ok: false, message: statusHint + "当前页还没有可巡检的回复链接。先从 App 打开原帖，到 X 发一条回复，插件会自动记录你的回复链接。" };
+  }
+
+  const pageTargets = targets.slice(0, REPLY_SCAN_PAGE_SIZE);
+  let scannedCount = 0;
+  let appliedCount = 0;
+
+  await setReplyScanProgress({
+    active: true,
+    total: pageTargets.length,
+    scanned: 0,
+    applied: 0,
+    batchSize: REPLY_SCAN_BATCH_SIZE,
+    pageSize: REPLY_SCAN_PAGE_SIZE,
+    targetTotal: targets.length,
+    message: `准备巡检当前页 ${pageTargets.length} 条已保存回复链接。`,
+  });
+
+  try {
+    for (let index = 0; index < pageTargets.length; index += 1) {
+      const item = pageTargets[index];
+      await setReplyScanProgress({
+        active: true,
+        total: pageTargets.length,
+        scanned: scannedCount,
+        applied: appliedCount,
+        batchSize: REPLY_SCAN_BATCH_SIZE,
+        pageSize: REPLY_SCAN_PAGE_SIZE,
+        targetTotal: targets.length,
+        current: index + 1,
+        message: `正在巡检当前页第 ${index + 1}/${pageTargets.length} 条：${clean(item.author) || clean(item.name) || "已保存回复"}`,
+      });
+
+      let tab = null;
+      try {
+        tab = await createTab({ url: item.replyUrl, active: false });
+        await waitForTabComplete(tab.id);
+        await delay(1800);
+        const scan = await sendToTabWithInjection(tab, { type: "RAY_SCAN_X_NOW" }, "x-bridge.js");
+        if (scan?.ok) {
+          const result = await processScan(scan, tab.id);
+          scannedCount += 1;
+          appliedCount += Number(result.appliedCount || 0);
+        }
+      } finally {
+        if (tab?.id) await removeTab(tab.id);
+      }
+
+      await setReplyScanProgress({
+        active: true,
+        total: pageTargets.length,
+        scanned: scannedCount,
+        applied: appliedCount,
+        batchSize: REPLY_SCAN_BATCH_SIZE,
+        pageSize: REPLY_SCAN_PAGE_SIZE,
+        targetTotal: targets.length,
+        current: index + 1,
+        message: `已完成 ${scannedCount}/${pageTargets.length} 条，已回写 ${appliedCount} 条。`,
+      });
+
+      if ((index + 1) % REPLY_SCAN_BATCH_SIZE === 0 && index + 1 < pageTargets.length) {
+        await delay(1200);
+      }
+    }
+
+    const overflowLabel = targets.length > REPLY_SCAN_PAGE_SIZE ? ` 当前页可巡检项超过 ${REPLY_SCAN_PAGE_SIZE} 条，本次已按上限处理前 ${REPLY_SCAN_PAGE_SIZE} 条。` : "";
+    const message = `当前页回复链接巡检完成：已检查 ${scannedCount} 条，自动回写 ${appliedCount} 条反馈。${overflowLabel}`;
+
+    await setReplyScanProgress({
+      active: false,
+      total: pageTargets.length,
+      scanned: scannedCount,
+      applied: appliedCount,
+      batchSize: REPLY_SCAN_BATCH_SIZE,
+      pageSize: REPLY_SCAN_PAGE_SIZE,
+      targetTotal: targets.length,
+      message,
+    });
+
+    return { ok: true, scannedCount, appliedCount, message };
+  } catch (error) {
+    const message = friendlyError(error);
+    await setReplyScanProgress({
+      active: false,
+      error: true,
+      total: pageTargets.length,
+      scanned: scannedCount,
+      applied: appliedCount,
+      batchSize: REPLY_SCAN_BATCH_SIZE,
+      pageSize: REPLY_SCAN_PAGE_SIZE,
+      targetTotal: targets.length,
+      message,
+    });
+    throw error;
+  }
+}
+async function applyUpdatesToApp(options = {}) {
+  const tab = await findAppTab();
+  if (!tab?.id) throw new Error("App 页面没有打开，反馈已先暂存。打开 Ray Growth OS 后可以手动回写。");
+  const stored = await storageGet(["rayUpdates"]);
+  const updates = Object.values(stored.rayUpdates || {});
+  if (!updates.length) return { ok: true, appliedCount: 0, message: "没有可回写的反馈。" };
+  const response = await sendToTabWithInjection(tab, { type: "RAY_APPLY_FEEDBACK_UPDATES", updates }, "app-bridge.js");
+  if (!response?.ok) throw new Error(response?.message || "回写 App 失败。请刷新 App 页面后重试。");
+  await storageRemove("rayUpdates");
+  return {
+    ...response,
+    message: options.silent ? `已自动回写 ${response.appliedCount || updates.length} 条反馈到 App。` : response.message || `已回写 ${response.appliedCount || updates.length} 条反馈到 App。`,
+  };
+}
+
+async function tryAutoApplyUpdatesToApp() {
+  try {
+    return await applyUpdatesToApp({ silent: true });
+  } catch (error) {
+    return { ok: false, appliedCount: 0, message: friendlyError(error) };
+  }
+}
+
+async function getState() {
+  const stored = await storageGet(["rayQueue", "rayUpdates", "rayPendingByTab", "raySelfUsername", "rayReplyScanProgress"]);
+  return {
+    ok: true,
+    queueCount: Array.isArray(stored.rayQueue) ? stored.rayQueue.length : 0,
+    updateCount: Object.keys(stored.rayUpdates || {}).length,
+    pendingCount: Object.keys(stored.rayPendingByTab || {}).length,
+    selfUsername: stored.raySelfUsername || "",
+    replyScanProgress: stored.rayReplyScanProgress || null,
+  };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  (async () => {
+    try {
+      if (message?.type === "POPUP_GET_STATE") return await getState();
+      if (message?.type === "POPUP_SET_SELF_USERNAME") {
+        const username = normalizeUsername(message.username);
+        if (!isValidXUsername(username)) {
+          return { ok: false, message: "这里要填 X 用户名，不是展示名。例如 Ray_Codeproxy，不要填 Ray | AI Coding 出海日记。" };
+        }
+        await storageSet({ raySelfUsername: username });
+        return { ...(await getState()), message: `已保存 X 用户名：@${username}` };
+      }
+      if (message?.type === "POPUP_SYNC_APP") return await syncFromApp();
+      if (message?.type === "POPUP_SCAN_X") return await scanCurrentXTab();
+      if (message?.type === "POPUP_REFRESH_REPLIES") return await refreshSavedReplies();
+      if (message?.type === "POPUP_APPLY_APP") return await applyUpdatesToApp();
+      if (message?.type === "RAY_APP_SOURCE_OPENED") return await rememberSourceFromApp(message.item, message.url);
+      if (message?.type === "RAY_X_SCAN_RESULT") return await processScan(message.scan, sender.tab?.id || 0);
+      return { ok: false, message: "未知操作。" };
+    } catch (error) {
+      return { ok: false, message: friendlyError(error) };
+    }
+  })().then(sendResponse);
+  return true;
+});

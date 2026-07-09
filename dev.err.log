@@ -1,0 +1,2260 @@
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⚠ Fast Refresh had to perform a full reload when ./src/app/page.tsx changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+[browser] Uncaught Error: The default export is not a React Component in "/page"
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: mode is not defined
+    at HeroPanel (src\app\page.tsx:448:117)
+  446 | ...
+  447 | ...
+> 448 | ... tracking-normal sm:text-5xl lg:text-6xl">{mode === "outbound" ? <>Find buyers before ...
+      |                                               ^
+  449 | ...:text-base">{copy.heroDescription}</p>
+  450 | ...
+  451 | ... {
+  digest: '3869042112'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: mode is not defined
+    at HeroPanel (src\app\page.tsx:448:117)
+  446 | ...
+  447 | ...
+> 448 | ... tracking-normal sm:text-5xl lg:text-6xl">{mode === "outbound" ? <>Find buyers before ...
+      |                                               ^
+  449 | ...:text-base">{copy.heroDescription}</p>
+  450 | ...
+  451 | ... {
+  digest: '3869042112'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+⨯ ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+⨯ ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+⨯ ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+⨯ ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+[browser] Uncaught Error: ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+⨯ ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+[browser] Uncaught Error: ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+[browser] Uncaught Error: ./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: C:\Users\EDY\IdeaProjects\seaProject\src\app\globals.css:171:20: Unknown word mask-image
+    [at error (turbopack:///[project]/node_modules/postcss/lib/input.js:135:16)]
+    [at unknownWord (turbopack:///[project]/node_modules/postcss/lib/parser.js:602:22)]
+    [at decl (turbopack:///[project]/node_modules/postcss/lib/parser.js:242:14)]
+    [at other (turbopack:///[project]/node_modules/postcss/lib/parser.js:408:18)]
+    [at parse (turbopack:///[project]/node_modules/postcss/lib/parser.js:479:16)]
+    [at parser (turbopack:///[project]/node_modules/postcss/lib/parse.js:11:12)]
+    [at new LazyResult (turbopack:///[project]/node_modules/postcss/lib/lazy-result.js:165:16)]
+    [at process (turbopack:///[project]/node_modules/postcss/lib/processor.js:53:14)]
+    [at transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:51)]
+    [at run (turbopack:///[turbopack-node]/child_process/evaluate.ts:89:29)]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:51:25
+Expected ident
+  [90m49 |[0m };
+  [90m50 |[0m
+[31m[1m>[0m [90m51 |[0m [36mtype[0m [33mGrokBridgeState[0m = {[32m`r`[0mn  keywords: string;[32m`r`[0mn  grokResult: string;[32m`r`[0mn};[32m`r`[0mn[32m`r`[0mntype.[33m..[0m
+  [90m   |[0m                         [31m[1m^^^[0m
+  [90m52 |[0m   channel: string;
+  [90m53 |[0m   intent: string;
+  [90m54 |[0m   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+[browser] Uncaught Error: ./src/app/page.tsx:51:25
+Expected ident
+  49 | };
+  50 |
+> 51 | type GrokBridgeState = {`r`n  keywords: string;`r`n  grokResult: string;`r`n};`r`n`r`ntype...
+     |                         ^^^
+  52 |   channel: string;
+  53 |   intent: string;
+  54 |   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:51:25)
+    at <unknown> (Error: (./src/app/page.tsx:51:25)
+[browser] Uncaught Error: ./src/app/page.tsx:51:25
+Expected ident
+  49 | };
+  50 |
+> 51 | type GrokBridgeState = {`r`n  keywords: string;`r`n  grokResult: string;`r`n};`r`n`r`ntype...
+     |                         ^^^
+  52 |   channel: string;
+  53 |   intent: string;
+  54 |   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:51:25)
+    at <unknown> (Error: (./src/app/page.tsx:51:25)
+[browser] Uncaught Error: ./src/app/page.tsx:51:25
+Expected ident
+  49 | };
+  50 |
+> 51 | type GrokBridgeState = {`r`n  keywords: string;`r`n  grokResult: string;`r`n};`r`n`r`ntype...
+     |                         ^^^
+  52 |   channel: string;
+  53 |   intent: string;
+  54 |   query: string;
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:51:25)
+    at <unknown> (Error: (./src/app/page.tsx:51:25)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: AiScorePanel is not defined
+    at Home (src\app\page.tsx:557:14)
+  555 |             <ManualSignalImportPanel current={current} modeSignals={signals[mode]} setMod...
+  556 |             <WorkbenchBackupPanel exportBackup={exportWorkbenchBackup} restoreBackupText=...
+> 557 |             <AiScorePanel mode={mode} items={sourceItems} savedCount={Object.keys(aiScore...
+      |              ^
+  558 |             <MetricGrid
+  559 |               queryCount={result.queries.length}
+  560 |               itemCount={items.length} {
+  digest: '945387649'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: AiScorePanel is not defined
+    at Home (src\app\page.tsx:557:14)
+  555 |             <ManualSignalImportPanel current={current} modeSignals={signals[mode]} setMod...
+  556 |             <WorkbenchBackupPanel exportBackup={exportWorkbenchBackup} restoreBackupText=...
+> 557 |             <AiScorePanel mode={mode} items={sourceItems} savedCount={Object.keys(aiScore...
+      |              ^
+  558 |             <MetricGrid
+  559 |               queryCount={result.queries.length}
+  560 |               itemCount={items.length} {
+  digest: '945387649'
+}
+⨯ ReferenceError: AiScorePanel is not defined
+    at Home (src\app\page.tsx:557:14)
+  555 |             <ManualSignalImportPanel current={current} modeSignals={signals[mode]} setMod...
+  556 |             <WorkbenchBackupPanel exportBackup={exportWorkbenchBackup} restoreBackupText=...
+> 557 |             <AiScorePanel mode={mode} items={sourceItems} savedCount={Object.keys(aiScore...
+      |              ^
+  558 |             <MetricGrid
+  559 |               queryCount={result.queries.length}
+  560 |               itemCount={items.length} {
+  digest: '945387649'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+[browser] Uncaught Error: ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:250:7)
+    at <unknown> (Error: (./src/app/page.tsx:250:7)
+[browser] Uncaught Error: ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:250:7)
+    at <unknown> (Error: (./src/app/page.tsx:250:7)
+[browser] Uncaught Error: ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:250:7)
+    at <unknown> (Error: (./src/app/page.tsx:250:7)
+[browser] ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  [90m248 |[0m };
+  [90m249 |[0m [36mconst[0m navItems = [[32m"信号"[0m, [32m"评分"[0m, [32m"草稿"[0m, [32m"执行"[0m];
+[31m[1m>[0m [90m250 |[0m [36mconst[0m [33mGROK_PROXY_CONFIG_STORAGE_KEY[0m = [32m"ray-growth-os:grok-proxy-config:v1"[0m;
+  [90m    |[0m       [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m251 |[0m
+  [90m252 |[0m [36mfunction[0m copyText(value: string) {
+  [90m253 |[0m   [36mif[0m (!value) [36mreturn[0m;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+[browser] Uncaught Error: ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:250:7)
+    at <unknown> (Error: (./src/app/page.tsx:250:7)
+[browser] Uncaught Error: ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:250:7)
+    at <unknown> (Error: (./src/app/page.tsx:250:7)
+[browser] Uncaught Error: ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:250:7)
+    at <unknown> (Error: (./src/app/page.tsx:250:7)
+[browser] ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:250:7
+the name `GROK_PROXY_CONFIG_STORAGE_KEY` is defined multiple times
+  248 | };
+  249 | const navItems = ["信号", "评分", "草稿", "执行"];
+> 250 | const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  251 |
+  252 | function copyText(value: string) {
+  253 |   if (!value) return;
+
+Ecmascript file had an error
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+⨯ ReferenceError: Settings is not defined
+    at GrokBridgePanel (src\app\page.tsx:1336:18)
+  1334 |             <Button asChild variant="outline" className="tech-secondary">
+  1335 |               <Link href="/settings">
+> 1336 |                 <Settings className="h-4 w-4" /> 配置中转
+       |                  ^
+  1337 |               </Link>
+  1338 |             </Button>
+  1339 |             <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled=... {
+  digest: '2228023135'
+}
+⨯ ReferenceError: Settings is not defined
+    at GrokBridgePanel (src\app\page.tsx:1336:18)
+  1334 |             <Button asChild variant="outline" className="tech-secondary">
+  1335 |               <Link href="/settings">
+> 1336 |                 <Settings className="h-4 w-4" /> 配置中转
+       |                  ^
+  1337 |               </Link>
+  1338 |             </Button>
+  1339 |             <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled=... {
+  digest: '2228023135'
+}
+⨯ ReferenceError: Settings is not defined
+    at GrokBridgePanel (src\app\page.tsx:1336:18)
+  1334 |             <Button asChild variant="outline" className="tech-secondary">
+  1335 |               <Link href="/settings">
+> 1336 |                 <Settings className="h-4 w-4" /> 配置中转
+       |                  ^
+  1337 |               </Link>
+  1338 |             </Button>
+  1339 |             <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled=... {
+  digest: '2228023135'
+}
+⨯ ReferenceError: Settings is not defined
+    at GrokBridgePanel (src\app\page.tsx:1336:18)
+  1334 |             <Button asChild variant="outline" className="tech-secondary">
+  1335 |               <Link href="/settings">
+> 1336 |                 <Settings className="h-4 w-4" /> 配置中转
+       |                  ^
+  1337 |               </Link>
+  1338 |             </Button>
+  1339 |             <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled=... {
+  digest: '2228023135'
+}
+⨯ ReferenceError: Settings is not defined
+    at GrokBridgePanel (src\app\page.tsx:1336:18)
+  1334 |             <Button asChild variant="outline" className="tech-secondary">
+  1335 |               <Link href="/settings">
+> 1336 |                 <Settings className="h-4 w-4" /> 配置中转
+       |                  ^
+  1337 |               </Link>
+  1338 |             </Button>
+  1339 |             <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled=... {
+  digest: '2228023135'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames
+⨯ Error: The default export is not a React Component in "/page"
+    at ignore-listed frames {
+  page: '/'
+}
+[browser] Uncaught Error: The default export is not a React Component in "/page"
+[browser] Uncaught Error: The default export is not a React Component in "/page"
+[browser] Uncaught Error: The default export is not a React Component in "/page"
+⨯ ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m2347 |[0m [32m          </div>[0m
+  [90m2348 |[0m [32m        </div>[0m
+[31m[1m>[0m [90m2349 |[0m [32m      ) : null}[0m
+  [90m     |[0m               [31m[1m^[0m
+  [90m2350 |[0m [32m    </div>[0m
+  [90m2351 |[0m [32m  );[0m
+  [90m2352 |[0m [32m}[0m
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m2347 |[0m [32m          </div>[0m
+  [90m2348 |[0m [32m        </div>[0m
+[31m[1m>[0m [90m2349 |[0m [32m      ) : null}[0m
+  [90m     |[0m               [31m[1m^[0m
+  [90m2350 |[0m [32m    </div>[0m
+  [90m2351 |[0m [32m  );[0m
+  [90m2352 |[0m [32m}[0m
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m2347 |[0m [32m          </div>[0m
+  [90m2348 |[0m [32m        </div>[0m
+[31m[1m>[0m [90m2349 |[0m [32m      ) : null}[0m
+  [90m     |[0m               [31m[1m^[0m
+  [90m2350 |[0m [32m    </div>[0m
+  [90m2351 |[0m [32m  );[0m
+  [90m2352 |[0m [32m}[0m
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m2347 |[0m [32m          </div>[0m
+  [90m2348 |[0m [32m        </div>[0m
+[31m[1m>[0m [90m2349 |[0m [32m      ) : null}[0m
+  [90m     |[0m               [31m[1m^[0m
+  [90m2350 |[0m [32m    </div>[0m
+  [90m2351 |[0m [32m  );[0m
+  [90m2352 |[0m [32m}[0m
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m2347 |[0m [32m          </div>[0m
+  [90m2348 |[0m [32m        </div>[0m
+[31m[1m>[0m [90m2349 |[0m [32m      ) : null}[0m
+  [90m     |[0m               [31m[1m^[0m
+  [90m2350 |[0m [32m    </div>[0m
+  [90m2351 |[0m [32m  );[0m
+  [90m2352 |[0m [32m}[0m
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m2347 |[0m [32m          </div>[0m
+  [90m2348 |[0m [32m        </div>[0m
+[31m[1m>[0m [90m2349 |[0m [32m      ) : null}[0m
+  [90m     |[0m               [31m[1m^[0m
+  [90m2350 |[0m [32m    </div>[0m
+  [90m2351 |[0m [32m  );[0m
+  [90m2352 |[0m [32m}[0m
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m2347 |[0m [32m          </div>[0m
+  [90m2348 |[0m [32m        </div>[0m
+[31m[1m>[0m [90m2349 |[0m [32m      ) : null}[0m
+  [90m     |[0m               [31m[1m^[0m
+  [90m2350 |[0m [32m    </div>[0m
+  [90m2351 |[0m [32m  );[0m
+  [90m2352 |[0m [32m}[0m
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m2347 |[0m [32m          </div>[0m
+  [90m2348 |[0m [32m        </div>[0m
+[31m[1m>[0m [90m2349 |[0m [32m      ) : null}[0m
+  [90m     |[0m               [31m[1m^[0m
+  [90m2350 |[0m [32m    </div>[0m
+  [90m2351 |[0m [32m  );[0m
+  [90m2352 |[0m [32m}[0m
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+[browser] Uncaught Error: ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  2347 |           </div>
+  2348 |         </div>
+> 2349 |       ) : null}
+       |               ^
+  2350 |     </div>
+  2351 |   );
+  2352 | }
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:2349:15)
+    at <unknown> (Error: (./src/app/page.tsx:2349:15)
+[browser] Uncaught Error: ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  2347 |           </div>
+  2348 |         </div>
+> 2349 |       ) : null}
+       |               ^
+  2350 |     </div>
+  2351 |   );
+  2352 | }
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:2349:15)
+    at <unknown> (Error: (./src/app/page.tsx:2349:15)
+[browser] ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  2347 |           </div>
+  2348 |         </div>
+> 2349 |       ) : null}
+       |               ^
+  2350 |     </div>
+  2351 |   );
+  2352 | }
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  2347 |           </div>
+  2348 |         </div>
+> 2349 |       ) : null}
+       |               ^
+  2350 |     </div>
+  2351 |   );
+  2352 | }
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  2347 |           </div>
+  2348 |         </div>
+> 2349 |       ) : null}
+       |               ^
+  2350 |     </div>
+  2351 |   );
+  2352 | }
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+[browser] ./src/app/page.tsx:2349:15
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  2347 |           </div>
+  2348 |         </div>
+> 2349 |       ) : null}
+       |               ^
+  2350 |     </div>
+  2351 |   );
+  2352 | }
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component] 
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: AiDraftPanel is not defined
+    at Home (src\app\page.tsx:956:14)
+  954 |             <WorkbenchBackupPanel exportBackup={exportWorkbenchBackup} restoreBackupText=...
+  955 |             <AiScorePanel mode={mode} items={scoreSourceItems} savedCount={Object.keys(ai...
+> 956 |             <AiDraftPanel mode={mode} items={draftSourceItems} savedCount={Object.keys(ai...
+      |              ^
+  957 |             <MetricGrid
+  958 |               queryCount={result.queries.length}
+  959 |               itemCount={items.length} {
+  digest: '2349176468'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: AiDraftPanel is not defined
+    at Home (src\app\page.tsx:956:14)
+  954 |             <WorkbenchBackupPanel exportBackup={exportWorkbenchBackup} restoreBackupText=...
+  955 |             <AiScorePanel mode={mode} items={scoreSourceItems} savedCount={Object.keys(ai...
+> 956 |             <AiDraftPanel mode={mode} items={draftSourceItems} savedCount={Object.keys(ai...
+      |              ^
+  957 |             <MetricGrid
+  958 |               queryCount={result.queries.length}
+  959 |               itemCount={items.length} {
+  digest: '2349176468'
+}
+⨯ ReferenceError: AiDraftPanel is not defined
+    at Home (src\app\page.tsx:956:14)
+  954 |             <WorkbenchBackupPanel exportBackup={exportWorkbenchBackup} restoreBackupText=...
+  955 |             <AiScorePanel mode={mode} items={scoreSourceItems} savedCount={Object.keys(ai...
+> 956 |             <AiDraftPanel mode={mode} items={draftSourceItems} savedCount={Object.keys(ai...
+      |              ^
+  957 |             <MetricGrid
+  958 |               queryCount={result.queries.length}
+  959 |               itemCount={items.length} {
+  digest: '2349176468'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+⨯ ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  [90m1475 |[0m ...
+  [90m1476 |[0m ...[32mecondary w-fit"[0m>
+[31m[1m>[0m [90m1477 |[0m ...[33malLink[0m className=[32m"h-3.5 w-3.5"[0m /> 来源/a>
+  [90m     |[0m                                            [31m[1m^[0m
+  [90m1478 |[0m ...
+  [90m1479 |[0m ...
+  [90m1480 |[0m ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+
+./src/app/page.tsx:1479:19
+Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+  [90m1477 |[0m               <a href={item.url} target=[32m"_blank"[0m rel=[32m"noreferrer"[0m><[33mExternalLink[0m classNam..[32m.[0m
+  [90m1478 |[0m             </[33mButton[0m>
+[31m[1m>[0m [90m1479 |[0m           ) : [36mnull[0m}
+  [90m     |[0m                   [31m[1m^[0m
+  [90m1480 |[0m           <[33mReasonList[0m reasons={item.reasons} />
+  [90m1481 |[0m           <[33mExecutionControls[0m mode={mode} item={item} signal={signal} onStatusChange={onS...
+  [90m1482 |[0m           <div className={cn([32m"grid gap-3"[0m, isOutbound ? [32m""[0m : [32m"xl:grid-cols-3"[0m)}>
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+[browser] Uncaught Error: ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  1475 | ...
+  1476 | ...econdary w-fit">
+> 1477 | ...alLink className="h-3.5 w-3.5" /> 来源/a>
+       |                                            ^
+  1478 | ...
+  1479 | ...
+  1480 | ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:1477:116)
+    at <unknown> (Error: (./src/app/page.tsx:1477:116)
+[browser] Uncaught Error: ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  1475 | ...
+  1476 | ...econdary w-fit">
+> 1477 | ...alLink className="h-3.5 w-3.5" /> 来源/a>
+       |                                            ^
+  1478 | ...
+  1479 | ...
+  1480 | ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:1477:116)
+    at <unknown> (Error: (./src/app/page.tsx:1477:116)
+[browser] Uncaught Error: ./src/app/page.tsx:1477:116
+Unexpected token. Did you mean `{'>'}` or `&gt;`?
+  1475 | ...
+  1476 | ...econdary w-fit">
+> 1477 | ...alLink className="h-3.5 w-3.5" /> 来源/a>
+       |                                            ^
+  1478 | ...
+  1479 | ...
+  1480 | ...
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+
+    at <unknown> (Error: ./src/app/page.tsx:1477:116)
+    at <unknown> (Error: (./src/app/page.tsx:1477:116)

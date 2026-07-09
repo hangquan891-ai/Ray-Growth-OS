@@ -1,0 +1,6 @@
+2026/07/06-15:57:49.788 e864 Reusing MANIFEST C:\Users\EDY\IdeaProjects\seaProject\.local\grok-profile\Default\Local Storage\leveldb/MANIFEST-000001
+2026/07/06-15:57:49.814 e864 Recovering log #7
+2026/07/06-15:57:49.828 e864 Reusing old log C:\Users\EDY\IdeaProjects\seaProject\.local\grok-profile\Default\Local Storage\leveldb/000007.log 
+2026/07/06-15:58:00.961 1c6b0 Level-0 table #11: started
+2026/07/06-15:58:00.968 1c6b0 Level-0 table #11: 85603 bytes OK
+2026/07/06-15:58:00.970 1c6b0 Delete type=0 #7

@@ -1,0 +1,28 @@
+{
+    "scripts": {
+        "dev": "next dev -p 3001",
+        "build": "next build",
+        "test": "node --test test/*.test.mjs",
+        "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+    },
+    "dependencies": {
+        "@radix-ui/react-slot": "latest",
+        "class-variance-authority": "latest",
+        "clsx": "latest",
+        "lucide-react": "latest",
+        "next": "latest",
+        "playwright-core": "^1.61.1",
+        "react": "latest",
+        "react-dom": "latest",
+        "tailwind-merge": "latest"
+    },
+    "devDependencies": {
+        "@types/node": "latest",
+        "@types/react": "latest",
+        "@types/react-dom": "latest",
+        "autoprefixer": "latest",
+        "postcss": "latest",
+        "tailwindcss": "^3.4.17",
+        "typescript": "latest"
+    }
+}

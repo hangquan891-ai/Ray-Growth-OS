@@ -1,0 +1,5 @@
+2026/07/06-15:55:34.632 f1b0 Creating DB C:\Users\EDY\IdeaProjects\seaProject\.local\grok-profile\Default\EdgeCoupons/coupons_data.db since it was missing.
+2026/07/06-15:55:34.641 f1b0 Reusing MANIFEST C:\Users\EDY\IdeaProjects\seaProject\.local\grok-profile\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2026/07/06-15:55:34.686 11a88 Level-0 table #5: started
+2026/07/06-15:55:34.690 11a88 Level-0 table #5: 682901 bytes OK
+2026/07/06-15:55:34.693 11a88 Delete type=0 #3
