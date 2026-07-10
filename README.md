@@ -84,6 +84,37 @@ npm run build      # production build
 - The selected locale is persisted in `ray-growth-os:locale:v1`.
 - The navigation, positioning flow, discovery choices, settings, and generated-model language are localized. Existing user-entered content and imported source posts are intentionally left unchanged.
 
+## Optional Chrome extension: X Helper
+
+The bundled **Ray Growth OS X Helper** closes the feedback loop after a human has replied on X. It is optional: the workbench works without it, and you can always record outcomes manually.
+
+### What it does
+
+1. Reads the local engagement queue from an open workbench tab.
+2. Associates an X source post with the reply you send yourself.
+3. Saves the public URL of that reply when it is visible on the X page.
+4. Checks public interaction outcomes and writes the result back to the local workbench.
+
+It does **not** publish replies, read DMs, bypass login, or call the paid X API.
+
+### Install locally (developer mode)
+
+1. Start the workbench and keep it open at `http://localhost:3001` or `http://127.0.0.1:3001`.
+2. In Chrome, open `chrome://extensions/` and enable **Developer mode**.
+3. Select **Load unpacked**.
+4. Choose [`extension/ray-growth-os-x-helper`](extension/ray-growth-os-x-helper).
+5. Pin **Ray Growth OS X Helper** if you want quick access to its popup.
+
+### Use it
+
+1. Open the extension popup and save your X handle (the part after `@`), or configure your public X profile in the app.
+2. Click **Read queue from App** in the popup.
+3. Open a source post from the workbench and reply on X yourself.
+4. Once the reply is visible, use **Scan current X page** or **Inspect saved reply links**.
+5. Keep the workbench tab open and use **Write pending feedback to App** if an update was stored while the app was unavailable.
+
+The extension relies on public X page DOM and may need maintenance after X UI changes. For its Chinese, implementation-focused notes, see [the extension README](extension/ray-growth-os-x-helper/README.md).
+
 ## Prompt design
 
 The built-in prompts are deliberately operational rather than promotional:
