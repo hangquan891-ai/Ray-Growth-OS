@@ -235,6 +235,7 @@
       replyDraft: stringOrFallback(source.replyDraft, ""),
       quoteDraft: stringOrFallback(source.quoteDraft, ""),
       postIdea: stringOrFallback(source.postIdea, ""),
+      outreachDraft: stringOrFallback(source.outreachDraft, ""),
       rationale: stringOrFallback(source.rationale, ""),
       toneNotes: stringOrFallback(source.toneNotes, ""),
       model: stringOrFallback(source.model, ""),

@@ -26,6 +26,7 @@ test("buildDraftRequestInput includes queue items and positive style samples", (
     replyDraft: "local reply",
     quoteDraft: "local quote",
     postIdea: "local post",
+    outreachDraft: "local outreach",
   }));
 
   const payload = buildDraftRequestInput({
@@ -50,6 +51,7 @@ test("buildDraftRequestInput includes queue items and positive style samples", (
   assert.equal(payload.items.length, AI_DRAFT_LIMIT);
   assert.equal(payload.items[0].itemId, itemDraftKey(items[0]));
   assert.equal(payload.items[0].localDrafts.replyDraft, "local reply");
+  assert.equal(payload.items[0].localDrafts.outreachDraft, "local outreach");
   assert.equal(payload.styleSamples.length, 1);
   assert.equal(payload.styleSamples[0].actualReply, "share a concrete first-user loop");
 });
@@ -71,6 +73,7 @@ test("normalizeAiDraftResponse and applyAiDraftOverrides update generated drafts
         replyDraft: "local reply",
         quoteDraft: "local quote",
         postIdea: "local post",
+        outreachDraft: "local outreach",
       },
     ],
   };
@@ -83,6 +86,7 @@ test("normalizeAiDraftResponse and applyAiDraftOverrides update generated drafts
           replyDraft: "AI reply",
           quoteDraft: "AI quote",
           postIdea: "AI post",
+          outreachDraft: "AI outreach",
           rationale: "matches pain",
           toneNotes: "direct",
         },
@@ -96,6 +100,7 @@ test("normalizeAiDraftResponse and applyAiDraftOverrides update generated drafts
   assert.equal(updated.opportunities[0].replyDraft, "AI reply");
   assert.equal(updated.opportunities[0].quoteDraft, "AI quote");
   assert.equal(updated.opportunities[0].postIdea, "AI post");
+  assert.equal(updated.opportunities[0].outreachDraft, "AI outreach");
   assert.equal(updated.opportunities[0].score, 88);
   assert.equal(updated.opportunities[0].aiDraft.rationale, "matches pain");
 });
@@ -113,4 +118,15 @@ test("buildOpenAiDraftRequestBody uses strict structured output per mode", () =>
   assert.equal(body.text.format.name, "ray_growth_draft_response");
   assert.deepEqual(schema.properties.drafts.items.required, ["itemId", "draft", "rationale", "toneNotes"]);
   assert.equal(schema.properties.drafts.items.additionalProperties, false);
+
+  const growthSchema = createDraftResponseSchema("growth");
+  assert.deepEqual(growthSchema.properties.drafts.items.required, [
+    "itemId",
+    "replyDraft",
+    "quoteDraft",
+    "postIdea",
+    "outreachDraft",
+    "rationale",
+    "toneNotes",
+  ]);
 });

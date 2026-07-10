@@ -100,8 +100,8 @@ test("buildXProfilePullPrompt turns a public X account into an account radar pro
 
   assert.match(prompt, /find high-intent X signals/);
   assert.match(prompt, /https:\/\/x\.com\/ray_codeproxy/);
-  assert.match(prompt, /账号雷达任务/);
-  assert.match(prompt, /账号雷达已读取到的公开 X 数据/);
+  assert.match(prompt, /竞品洞察任务/);
+  assert.match(prompt, /竞品洞察已读取到的公开 X 数据/);
   assert.match(prompt, /AI Coding 出海日记/);
   assert.match(prompt, /商业对比/);
   assert.match(prompt, /accountRadar/);

@@ -88,7 +88,7 @@ export default function SettingsPage() {
       window.localStorage.setItem(GROK_PROXY_CONFIG_STORAGE_KEY, JSON.stringify(config));
       setGrokApiKey(config.apiKey);
       setGrokModel(config.model);
-      notify(config.apiKey ? "已保存 Grok 配置。现在可以回到工作台使用账号雷达和中转查询。" : "已保存 Grok 默认模型，但还没有填写密钥。", config.apiKey ? "success" : "info");
+      notify(config.apiKey ? "已保存 Grok 配置。现在可以回到工作台使用竞品洞察和中转查询。" : "已保存 Grok 默认模型，但还没有填写密钥。", config.apiKey ? "success" : "info");
     } catch {
       notify("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "error");
     }
@@ -171,7 +171,7 @@ export default function SettingsPage() {
               <KeyRound className="mr-1 h-3.5 w-3.5" /> 密钥设置
             </Badge>
             <h1 className="mt-4 text-3xl font-black text-white sm:text-5xl">AI 接口配置</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">Grok 用来找讨论和做账号雷达，GPT-5.5 用来评分和生成草稿。两者都通过 codeproxy.dev 中转，请分别保存密钥和模型。</p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">Grok 用来找讨论和做竞品洞察，GPT-5.5 用来评分和生成草稿。两者都通过 codeproxy.dev 中转，请分别保存密钥和模型。</p>
           </div>
           <Button asChild variant="outline" className="tech-secondary w-full sm:w-auto">
             <Link href="/">
@@ -188,7 +188,7 @@ export default function SettingsPage() {
                   <CardTitle className="flex items-center gap-2 text-xl text-white">
                     <Radar className="h-5 w-5 text-blue-200" /> Grok 找人
                   </CardTitle>
-                  <CardDescription className="mt-2 text-white/55">用于 Grok 找讨论、账号雷达挖竞品/KOL受众，并生成可导入 Signal。</CardDescription>
+                  <CardDescription className="mt-2 text-white/55">用于 Grok 找讨论、竞品洞察与竞品/KOL 受众挖掘，并生成可导入 Signal。</CardDescription>
                 </div>
                 <Badge variant="outline" className={statusClass(grokHasKey)}>{grokHasKey ? "已配置" : "未配置"}</Badge>
               </div>

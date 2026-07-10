@@ -224,7 +224,7 @@ export async function POST(request: Request) {
           {
             ok: false,
             status: "profile_fetch_failed",
-            message: "账号雷达没有读取到可用的公开 X 数据。请检查账号地址是否正确，或稍后再试。",
+            message: "竞品洞察没有读取到可用的公开 X 数据。请检查账号地址是否正确，或稍后再试。",
             pulledProfile,
           },
           { status: 502 }

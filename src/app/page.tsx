@@ -39,14 +39,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AI_RESPONSE_CONFIG_STORAGE_KEY, DEFAULT_AI_RESPONSE_MODEL, DEFAULT_GROK_PROXY_MODEL, GROK_PROXY_CONFIG_STORAGE_KEY, X_PROFILE_CONFIG_STORAGE_KEY, normalizeAiResponseConfig, normalizeGrokProxyConfig, normalizeXProfileConfig } from "@/lib/codeproxy-grok";
 import { buildGrokSearchPrompt } from "@/lib/grok-utils";
 import { AI_DRAFT_LIMIT, applyAiDraftOverrides, buildDraftRequestInput } from "@/lib/llm-drafts";
 import { applyGrowthMemoryToQueueItems, buildGrowthMemoryPromptContext, buildGrowthMemoryRequestInput, growthMemoryKeywordText, normalizeGrowthMemoryState } from "@/lib/growth-memory";
 import { AI_SCORE_LIMIT, applyAiScoreOverrides, buildScoreRequestInput } from "@/lib/llm-scoring";
-import { runGrowthWorkflow, runOutboundWorkflow } from "@/lib/outbound";
+import { runGrowthWorkflow } from "@/lib/outbound";
 import { buildFeedbackLearningPack, createSignal, formatSignalsAsLeadInput, mergeSignals, parseSignalsFromText, signalDedupKey } from "@/lib/signals";
 import { CURRENT_VERSION, DEFAULT_AI_DRAFT_STATE, DEFAULT_AI_SCORE_STATE, DEFAULT_GROK_BRIDGE_STATE, DEFAULT_GROWTH_MEMORY_STATE, DEFAULT_SIGNAL_STATE, WORKBENCH_STORAGE_KEY, createWorkbenchBackup, parseStoredWorkbenchState, parseWorkbenchBackup, serializeWorkbenchState } from "@/lib/workbench-state";
 import { cn } from "@/lib/utils";
@@ -274,6 +273,7 @@ type AiDraft = {
   replyDraft?: string;
   quoteDraft?: string;
   postIdea?: string;
+  outreachDraft?: string;
   rationale?: string;
   toneNotes?: string;
   model?: string;
@@ -432,6 +432,7 @@ type GrowthOpportunity = {
   replyDraft: string;
   quoteDraft: string;
   postIdea: string;
+  outreachDraft: string;
 };
 
 type QueueItem = OutboundLead | GrowthOpportunity;
@@ -490,7 +491,7 @@ const executionOptions: Record<Mode, Array<{ value: SignalExecutionStatus; label
   ],
   growth: [
     { value: "new", label: "未执行" },
-    { value: "replied", label: "已回复" },
+    { value: "replied", label: "已互动" },
     { value: "quoted", label: "已引用" },
     { value: "saved", label: "已收藏" },
     { value: "deferred", label: "搁置" },
@@ -667,21 +668,21 @@ const modeCopy: Record<Mode, ModeContent> = {
     csvName: "主动获客线索.csv",
   },
   growth: {
-    badge: "受众增长",
-    title: "填写账号定位",
-    description: "先说清楚你的账号、目标读者和内容支柱，再去 Grok 找可互动的 X 讨论。",
-    heroTitle: "把 X 上的讨论变成粉丝增长。",
-    heroDescription: "给创作者和独立开发者使用的每日增长工作台：找到相关讨论、生成回复角度，并沉淀可复用的内容循环。",
-    primaryLabel: "账号名称",
+    badge: "增长机会",
+    title: "填写增长定位",
+    description: "说清楚你是谁、想影响谁和能解决什么问题，再去 Grok 找值得互动或跟进的 X 讨论。",
+    heroTitle: "把 X 上的讨论变成增长机会。",
+    heroDescription: "从公开讨论中找到相关用户，判断互动与潜在需求价值，生成回复、引用、选题和私下跟进草稿。",
+    primaryLabel: "账号 / 产品名称",
     secondaryLabel: "增长目标",
-    descriptionLabel: "账号定位",
-    targetLabel: "目标读者",
-    pillarLabel: "内容支柱",
+    descriptionLabel: "定位描述",
+    targetLabel: "目标人群",
+    pillarLabel: "主题 / 痛点",
     candidateLabel: "已导入 X 信号",
-    resultTitle: "互动指挥队列",
-    queueDescription: "按互动价值和内容延展性排序。",
-    hotLabel: "立即互动",
-    csvName: "受众增长机会.csv",
+    resultTitle: "增长机会队列",
+    queueDescription: "按相关性、互动价值、潜在需求和内容延展性排序。",
+    hotLabel: "优先处理",
+    csvName: "增长机会.csv",
   },
 };
 const initialState: Record<Mode, FormState> = {
@@ -710,8 +711,6 @@ X | Cursor 用户 |  | 用 Cursor 做了一个小工具，但不知道怎么验�
 X | SaaS 开发者 |  | 产品上线后没有流量，想知道怎么获得第一批用户`,
   },
 };
-const navItems = ["信号", "评分", "草稿", "执行"];
-
 function migrateStoredForms(forms: Record<Mode, FormState>): Record<Mode, FormState> {
   const next: Record<Mode, FormState> = {
     outbound: { ...initialState.outbound, ...(forms.outbound ?? {}) },
@@ -908,18 +907,98 @@ function repairAutoFeedbackState(state: SignalState) {
   } as SignalState;
 }
 
-const dashboardTabs: Array<{ value: DashboardTab; label: string; shortLabel: string; icon: ReactNode }> = [
+function mergeLeadInputTexts(...values: string[]) {
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => String(value ?? "").split(/\r?\n/))
+        .map((line) => line.trim())
+        .filter(Boolean)
+    )
+  ).join("\n");
+}
+
+function convertLegacyAiScores(scores: Record<string, AiScore>) {
+  return Object.fromEntries(
+    Object.entries(scores ?? {}).map(([key, score]) => [
+      key,
+      {
+        ...score,
+        label: score.label === "High intent" ? "Engage now" : score.label === "Warm" ? "Watch" : score.label === "Low" ? "Skip" : score.label,
+      },
+    ])
+  ) as Record<string, AiScore>;
+}
+
+function convertLegacyAiDrafts(drafts: Record<string, AiDraft>) {
+  return Object.fromEntries(
+    Object.entries(drafts ?? {}).map(([key, draft]) => [
+      key,
+      {
+        ...draft,
+        outreachDraft: draft.outreachDraft || draft.draft || "",
+      },
+    ])
+  ) as Record<string, AiDraft>;
+}
+
+function unifyRestoredWorkbenchState(restored: unknown) {
+  const source = restored as Partial<{
+    mode: unknown;
+    forms: Record<Mode, FormState>;
+    grokBridge: GrokBridgeState;
+    signals: SignalState;
+    aiScores: AiScoreState;
+    aiDrafts: AiDraftState;
+    growthMemory: GrowthMemoryState;
+  }>;
+  const sourceMode: Mode = source.mode === "outbound" ? "outbound" : "growth";
+  const forms = migrateStoredForms((source.forms ?? initialState) as Record<Mode, FormState>);
+  const repairedSignals = repairAutoFeedbackState((source.signals ?? DEFAULT_SIGNAL_STATE) as SignalState);
+  const restoredScores = (source.aiScores ?? DEFAULT_AI_SCORE_STATE) as AiScoreState;
+  const restoredDrafts = (source.aiDrafts ?? DEFAULT_AI_DRAFT_STATE) as AiDraftState;
+  const secondaryMode: Mode = sourceMode === "outbound" ? "growth" : "outbound";
+  const unifiedSignals = mergeSignals(repairedSignals[sourceMode] ?? [], repairedSignals[secondaryMode] ?? []).signals as Signal[];
+  const convertedOutboundScores = convertLegacyAiScores(restoredScores.outbound ?? {});
+  const convertedOutboundDrafts = convertLegacyAiDrafts(restoredDrafts.outbound ?? {});
+  const unifiedScores = sourceMode === "outbound"
+    ? { ...(restoredScores.growth ?? {}), ...convertedOutboundScores }
+    : { ...convertedOutboundScores, ...(restoredScores.growth ?? {}) };
+  const unifiedDrafts = sourceMode === "outbound"
+    ? { ...(restoredDrafts.growth ?? {}), ...convertedOutboundDrafts }
+    : { ...convertedOutboundDrafts, ...(restoredDrafts.growth ?? {}) };
+
+  return {
+    forms: {
+      ...forms,
+      growth: {
+        ...forms[sourceMode],
+        leadInput: mergeLeadInputTexts(forms[sourceMode].leadInput, forms[secondaryMode].leadInput),
+      },
+    } as Record<Mode, FormState>,
+    grokBridge: (source.grokBridge ?? DEFAULT_GROK_BRIDGE_STATE) as GrokBridgeState,
+    signals: { ...repairedSignals, growth: unifiedSignals } as SignalState,
+    aiScores: { ...restoredScores, growth: unifiedScores } as AiScoreState,
+    aiDrafts: { ...restoredDrafts, growth: unifiedDrafts } as AiDraftState,
+    growthMemory: (source.growthMemory ?? DEFAULT_GROWTH_MEMORY_STATE) as GrowthMemoryState,
+  };
+}
+
+const workflowDashboardTabs: Array<{ value: DashboardTab; label: string; shortLabel: string; icon: ReactNode }> = [
   { value: "overview", label: "总览", shortLabel: "总览", icon: <HomeIcon className="h-5 w-5" /> },
   { value: "search", label: "定位找人", shortLabel: "找人", icon: <Search className="h-5 w-5" /> },
-  { value: "account", label: "账号雷达", shortLabel: "雷达", icon: <Radar className="h-5 w-5" /> },
   { value: "engage", label: "互动队列", shortLabel: "互动", icon: <MessageSquareText className="h-5 w-5" /> },
 ];
+const insightDashboardTabs: Array<{ value: DashboardTab; label: string; shortLabel: string; icon: ReactNode }> = [
+  { value: "account", label: "竞品洞察", shortLabel: "竞品", icon: <Radar className="h-5 w-5" /> },
+];
+const dashboardTabs = [...workflowDashboardTabs, ...insightDashboardTabs];
 
 function dashboardTabLabel(tab: DashboardTab) {
   return dashboardTabs.find((item) => item.value === tab)?.label ?? "总览";
 }
 export default function Home() {
-  const [mode, setMode] = useState<Mode>("growth");
+  const mode: Mode = "growth";
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [forms, setForms] = useState<Record<Mode, FormState>>(initialState);
   const [grokBridge, setGrokBridge] = useState<GrokBridgeState>(DEFAULT_GROK_BRIDGE_STATE);
@@ -942,13 +1021,13 @@ export default function Home() {
         aiDrafts: DEFAULT_AI_DRAFT_STATE,
         growthMemory: DEFAULT_GROWTH_MEMORY_STATE,
       });
-      setMode(restored.mode as Mode);
-      setForms(migrateStoredForms(restored.forms as Record<Mode, FormState>));
-      setGrokBridge(restored.grokBridge as GrokBridgeState);
-      setSignals(repairAutoFeedbackState(restored.signals as SignalState));
-      setAiScores(restored.aiScores as AiScoreState);
-      setAiDrafts(restored.aiDrafts as AiDraftState);
-      setGrowthMemory(restored.growthMemory as GrowthMemoryState);
+      const unified = unifyRestoredWorkbenchState(restored);
+      setForms(unified.forms);
+      setGrokBridge(unified.grokBridge);
+      setSignals(unified.signals);
+      setAiScores(unified.aiScores);
+      setAiDrafts(unified.aiDrafts);
+      setGrowthMemory(unified.growthMemory);
     } finally {
       setIsWorkbenchReady(true);
     }
@@ -966,13 +1045,13 @@ export default function Home() {
         aiDrafts: DEFAULT_AI_DRAFT_STATE,
         growthMemory: DEFAULT_GROWTH_MEMORY_STATE,
       });
-      setMode(restored.mode as Mode);
-      setForms(migrateStoredForms(restored.forms as Record<Mode, FormState>));
-      setGrokBridge(restored.grokBridge as GrokBridgeState);
-      setSignals(repairAutoFeedbackState(restored.signals as SignalState));
-      setAiScores(restored.aiScores as AiScoreState);
-      setAiDrafts(restored.aiDrafts as AiDraftState);
-      setGrowthMemory(restored.growthMemory as GrowthMemoryState);
+      const unified = unifyRestoredWorkbenchState(restored);
+      setForms(unified.forms);
+      setGrokBridge(unified.grokBridge);
+      setSignals(unified.signals);
+      setAiScores(unified.aiScores);
+      setAiDrafts(unified.aiDrafts);
+      setGrowthMemory(unified.growthMemory);
       showToast("插件同步的反馈已更新到页面。", "success");
     }
 
@@ -999,7 +1078,7 @@ export default function Home() {
     } catch {
       // localStorage can fail in private mode or when the browser quota is full.
     }
-  }, [aiDrafts, aiScores, forms, grokBridge, growthMemory, isWorkbenchReady, mode, signals]);
+  }, [aiDrafts, aiScores, forms, grokBridge, growthMemory, isWorkbenchReady, signals]);
   const current = forms[mode];
   const copy = modeCopy[mode];
   const workflowLeadInput = useMemo(
@@ -1007,21 +1086,7 @@ export default function Home() {
     [current.leadInput, mode, signals]
   );
 
-  const localResult = useMemo((): WorkbenchResult => {
-    if (mode === "outbound") {
-      const workflow = runOutboundWorkflow(
-        {
-          name: current.productName,
-          description: current.description,
-          targetCustomer: current.targetCustomer,
-          competitors: current.competitors,
-          painPoints: current.painPoints,
-        },
-        workflowLeadInput
-      ) as { queries: Query[]; leads: OutboundLead[] };
-      return { mode: "outbound", ...workflow };
-    }
-
+  const localResult = useMemo((): GrowthResult => {
     const workflow = runGrowthWorkflow(
       {
         accountName: current.productName,
@@ -1038,11 +1103,11 @@ export default function Home() {
   const scoredResult = useMemo(() => applyAiScoreOverrides(localResult, aiScores[mode]) as WorkbenchResult, [aiScores, localResult, mode]);
   const memoryAdjustedResult = useMemo(() => applyGrowthMemoryToQueueItems(scoredResult, growthMemory) as WorkbenchResult, [growthMemory, scoredResult]);
   const result = useMemo(() => applyAiDraftOverrides(memoryAdjustedResult, aiDrafts[mode]) as WorkbenchResult, [aiDrafts, mode, memoryAdjustedResult]);
-  const scoreSourceItems: QueueItem[] = localResult.mode === "outbound" ? localResult.leads : localResult.opportunities;
+  const scoreSourceItems: QueueItem[] = localResult.opportunities;
   const draftSourceItems: QueueItem[] = memoryAdjustedResult.mode === "outbound" ? memoryAdjustedResult.leads : memoryAdjustedResult.opportunities;
   const items: QueueItem[] = result.mode === "outbound" ? result.leads : result.opportunities;
   const hotCount = items.filter((item) => item.label === (result.mode === "outbound" ? "High intent" : "Engage now")).length;
-  const draftCount = result.mode === "outbound" ? result.leads.length : result.opportunities.length * 3;
+  const draftCount = result.mode === "outbound" ? result.leads.length : result.opportunities.length * 4;
   const averageScore = items.length ? Math.round(items.reduce((sum, item) => sum + item.score, 0) / items.length) : 0;
   const topItem = items[0];
   const signalByKey = useMemo(() => {
@@ -1203,7 +1268,7 @@ export default function Home() {
       return;
     }
 
-    const header = ["平台", "名称", "链接", "分数", "标签", "动作", "原因", "备注", "回复", "引用", "选题"];
+    const header = ["平台", "名称", "链接", "分数", "标签", "动作", "原因", "备注", "回复", "引用", "选题", "私下跟进"];
     const rows = result.opportunities.map((item) =>
       [
         item.platform,
@@ -1217,6 +1282,7 @@ export default function Home() {
         item.replyDraft,
         item.quoteDraft,
         item.postIdea,
+        item.outreachDraft,
       ]
         .map(csvEscape)
         .join(",")
@@ -1231,7 +1297,7 @@ export default function Home() {
     }
     copyText(
       result.opportunities
-        .map((item, index) => `${index + 1}. ${item.name}\n直接回复：${item.replyDraft}\n引用转发：${item.quoteDraft}\n内容选题：${item.postIdea}`)
+        .map((item, index) => `${index + 1}. ${item.name}\n直接回复：${item.replyDraft}\n引用转发：${item.quoteDraft}\n内容选题：${item.postIdea}\n私下跟进：${item.outreachDraft}`)
         .join("\n\n")
     );
   }
@@ -1742,14 +1808,14 @@ export default function Home() {
       return { ok: false, message: "备份文件不是有效的 Ray Growth OS JSON。" };
     }
 
-    setMode(restored.state.mode as Mode);
-    setForms(restored.state.forms as Record<Mode, FormState>);
-    setGrokBridge(restored.state.grokBridge as GrokBridgeState);
-    setSignals(restored.state.signals as SignalState);
-    setAiScores(restored.state.aiScores as AiScoreState);
-    setAiDrafts(restored.state.aiDrafts as AiDraftState);
-    setGrowthMemory(restored.state.growthMemory as GrowthMemoryState);
-    return { ok: true, message: "已恢复本地备份，当前模式、输入和 Signal 数据已更新。" };
+    const unified = unifyRestoredWorkbenchState(restored.state);
+    setForms(unified.forms);
+    setGrokBridge(unified.grokBridge);
+    setSignals(unified.signals);
+    setAiScores(unified.aiScores);
+    setAiDrafts(unified.aiDrafts);
+    setGrowthMemory(unified.growthMemory);
+    return { ok: true, message: "已恢复本地备份，历史模式数据已合并到增长机会工作台。" };
   }
   return (
     <main className="tech-shell surface-grid relative flex h-screen overflow-hidden text-foreground">
@@ -1760,8 +1826,6 @@ export default function Home() {
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <DashboardTopbar
           activeTab={activeTab}
-          mode={mode}
-          setMode={setMode}
           urgentCount={hotCount}
           downloadCsv={downloadCsv}
         />
@@ -1849,23 +1913,18 @@ function DashboardSidebar({ activeTab, setActiveTab }: { activeTab: DashboardTab
         <Command className="h-5 w-5" />
       </div>
       <nav className="mt-4 grid gap-2">
-        {dashboardTabs.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            aria-label={tab.label}
-            title={tab.label}
-            onClick={() => setActiveTab(tab.value)}
-            className={cn(
-              "group relative flex h-10 w-10 items-center justify-center gap-3 overflow-hidden rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 group-hover/sidebar:w-36 group-hover/sidebar:justify-start group-hover/sidebar:px-3 [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125 active:[&_svg]:scale-110",
-              activeTab === tab.value ? "bg-blue-400/10 text-blue-100" : "text-white/40 hover:bg-white/[0.05] hover:text-white/70"
-            )}
-          >
-            {activeTab === tab.value ? <span className="absolute -left-2 top-2 h-6 w-0.5 rounded-full bg-blue-300" /> : null}
-            {tab.icon}
-            <span className="hidden min-w-0 truncate text-sm font-semibold opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">{tab.label}</span>
-          </button>
-        ))}
+        <div className="grid gap-2">
+          {workflowDashboardTabs.map((tab) => (
+            <SidebarTabButton key={tab.value} tab={tab} activeTab={activeTab} setActiveTab={setActiveTab} />
+          ))}
+        </div>
+        <div className="my-1 h-px w-10 bg-white/[0.08] transition-[width] duration-300 group-hover/sidebar:w-36" />
+        <p className="hidden px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/25 opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">洞察工具</p>
+        <div className="grid gap-2">
+          {insightDashboardTabs.map((tab) => (
+            <SidebarTabButton key={tab.value} tab={tab} activeTab={activeTab} setActiveTab={setActiveTab} />
+          ))}
+        </div>
       </nav>
       <Link
         href="/settings"
@@ -1880,9 +1939,36 @@ function DashboardSidebar({ activeTab, setActiveTab }: { activeTab: DashboardTab
   );
 }
 
+function SidebarTabButton({
+  tab,
+  activeTab,
+  setActiveTab,
+}: {
+  tab: { value: DashboardTab; label: string; icon: ReactNode };
+  activeTab: DashboardTab;
+  setActiveTab: Dispatch<SetStateAction<DashboardTab>>;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={tab.label}
+      title={tab.label}
+      onClick={() => setActiveTab(tab.value)}
+      className={cn(
+        "group relative flex h-10 w-10 items-center justify-center gap-3 overflow-hidden rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 group-hover/sidebar:w-36 group-hover/sidebar:justify-start group-hover/sidebar:px-3 [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125 active:[&_svg]:scale-110",
+        activeTab === tab.value ? "bg-blue-400/10 text-blue-100" : "text-white/40 hover:bg-white/[0.05] hover:text-white/70"
+      )}
+    >
+      {activeTab === tab.value ? <span className="absolute -left-2 top-2 h-6 w-0.5 rounded-full bg-blue-300" /> : null}
+      {tab.icon}
+      <span className="hidden min-w-0 truncate text-sm font-semibold opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">{tab.label}</span>
+    </button>
+  );
+}
+
 function MobileDashboardNav({ activeTab, setActiveTab }: { activeTab: DashboardTab; setActiveTab: Dispatch<SetStateAction<DashboardTab>> }) {
   return (
-    <nav className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 rounded-lg border border-white/[0.08] bg-[#08090d]/90 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl md:hidden">
+    <nav className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-4 rounded-lg border border-white/[0.08] bg-[#08090d]/90 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl md:hidden">
       {dashboardTabs.map((tab) => (
         <button
           key={tab.value}
@@ -1901,14 +1987,10 @@ function MobileDashboardNav({ activeTab, setActiveTab }: { activeTab: DashboardT
 
 function DashboardTopbar({
   activeTab,
-  mode,
-  setMode,
   urgentCount,
   downloadCsv,
 }: {
   activeTab: DashboardTab;
-  mode: Mode;
-  setMode: (mode: Mode) => void;
   urgentCount: number;
   downloadCsv: () => void;
 }) {
@@ -1928,16 +2010,9 @@ function DashboardTopbar({
       </div>
 
       <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-        <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)} className="w-full sm:w-auto">
-          <TabsList className="grid h-9 w-full grid-cols-2 rounded-lg border border-white/[0.08] bg-white/[0.04] sm:w-[250px]">
-            <TabsTrigger value="outbound" className="rounded-md text-xs text-white/60 data-[state=active]:bg-white/[0.08] data-[state=active]:text-white">
-              <Radar className="h-3.5 w-3.5" /> 主动获客
-            </TabsTrigger>
-            <TabsTrigger value="growth" className="rounded-md text-xs text-white/60 data-[state=active]:bg-white/[0.08] data-[state=active]:text-white">
-              <Users className="h-3.5 w-3.5" /> 受众增长
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <Badge variant="outline" className="h-9 rounded-lg border-blue-300/15 bg-blue-400/10 px-3 text-blue-100">
+          <Radar className="mr-1.5 h-3.5 w-3.5" /> 增长机会
+        </Badge>
         <Button variant="outline" size="sm" onClick={downloadCsv} className="tech-secondary h-9">
           <Download className="h-4 w-4" /> CSV
         </Button>
@@ -1970,7 +2045,7 @@ function OverviewTab({
   const queueCount = result.mode === "outbound" ? result.leads.length : result.opportunities.length;
   const overviewStages: Array<{ label: string; value: number; detail: string; help: string; targetTab: DashboardTab }> = [
     { label: "定位找人", value: result.queries.length, detail: "账号 + Grok", help: "填清楚定位，用 Grok 搜公开讨论并导入互动队列。", targetTab: "search" },
-    { label: "账号雷达", value: queueCount, detail: "竞品 / KOL", help: "输入竞品、KOL 或目标用户账号，围绕它的受众挖可互动线索。", targetTab: "account" },
+    { label: "竞品洞察", value: queueCount, detail: "可选洞察工具", help: "对比竞品、KOL 或目标账号的定位和受众，从机会空白里挖可互动线索。", targetTab: "account" },
     { label: "互动队列", value: queueCount, detail: "评分 + 草稿 + 执行", help: "在一个队列里看优先级、运行 AI 评分/草稿、打开来源并标记处理结果。", targetTab: "engage" },
   ];
 
@@ -2019,7 +2094,7 @@ function OverviewLoopVisual({
   const loopSteps: Array<{ label: string; value: number; detail: string; icon: ReactNode; targetTab: DashboardTab }> = [
     { label: "填定位", value: result.queries.length, detail: "生成 Grok Prompt", icon: <Target className="h-5 w-5" />, targetTab: "search" },
     { label: "找讨论", value: queueCount, detail: "导入 X 结果", icon: <Radar className="h-5 w-5" />, targetTab: "search" },
-    { label: "挖账号", value: queueCount, detail: "竞品/KOL", icon: <Users className="h-5 w-5" />, targetTab: "account" },
+    { label: "竞品洞察", value: queueCount, detail: "可选支线", icon: <Users className="h-5 w-5" />, targetTab: "account" },
     { label: "AI 排序", value: averageScore, detail: "平均优先级", icon: <Gauge className="h-5 w-5" />, targetTab: "engage" },
     { label: "去互动", value: hotCount, detail: "高分未执行", icon: <MessageSquareText className="h-5 w-5" />, targetTab: "engage" },
   ];
@@ -2926,7 +3001,7 @@ function EngagementAccordionCard({
           ) : null}
           <ReasonList reasons={item.reasons} />
           <ExecutionControls mode={mode} item={item} signal={signal} onStatusChange={onStatusChange} onFeedbackChange={onFeedbackChange} onUsedDraftChange={onUsedDraftChange} />
-          <div className={cn("grid gap-3", isOutbound ? "" : "xl:grid-cols-3")}>
+          <div className={cn("grid gap-3", isOutbound ? "" : "xl:grid-cols-2 2xl:grid-cols-4")}>
             {isOutbound ? (
               <DraftBlock icon={<MessageSquareText className="h-4 w-4" />} title="私信开场" description="发给这个潜在线索的第一句话。" value={outboundItem.draft} source={draftSourceForItem(item)} />
             ) : (
@@ -2934,6 +3009,7 @@ function EngagementAccordionCard({
                 <DraftBlock icon={<MessageSquareText className="h-4 w-4" />} title="直接回复" description="发到原帖或评论下面，用来先建立互动。" value={growthItem.replyDraft} source={draftSourceForItem(item)} />
                 <DraftBlock icon={<Quote className="h-4 w-4" />} title="引用转发" description="引用这条内容再发表自己的观点。" value={growthItem.quoteDraft} source={draftSourceForItem(item)} />
                 <DraftBlock icon={<Lightbulb className="h-4 w-4" />} title="内容选题" description="把这个信号延展成你自己的原创帖。" value={growthItem.postIdea} source={draftSourceForItem(item)} />
+                <DraftBlock icon={<Target className="h-4 w-4" />} title="私下跟进" description="对方有明确需求时用于私信或后续交流，不要硬卖。" value={growthItem.outreachDraft} source={draftSourceForItem(item)} />
               </>
             )}
           </div>
@@ -2975,54 +3051,6 @@ function AudienceTab({
         <PipelinePanel mode={mode} stages={stages} />
       </div>
     </div>
-  );
-}
-function TopBar({ mode, setMode, copyQueries, downloadCsv }: { mode: Mode; setMode: (mode: Mode) => void; copyQueries: () => void; downloadCsv: () => void }) {
-  return (
-    <header className="glass-nav fade-up sticky top-3 z-50 flex flex-col gap-3 rounded-lg border p-3 shadow-soft backdrop-blur lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-white shadow-sm">
-          <Command className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-base font-bold leading-none text-slate-950">Ray Growth OS</h1>
-            <Badge variant="secondary" className="rounded-md border border-slate-200 bg-slate-100 text-slate-700">
-              本地 MVP
-            </Badge>
-          </div>
-          <div className="mt-2 hidden flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-500 sm:flex">
-            {navItems.map((item) => (
-              <span key={item} className="rounded-md border border-slate-200 bg-white px-2 py-1">
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
-        <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)} className="sm:w-auto">
-          <TabsList className="grid h-11 w-full grid-cols-2 rounded-md border border-slate-200 bg-slate-100 sm:w-[290px]">
-            <TabsTrigger value="outbound" className="rounded-[6px]">
-              <Radar className="h-4 w-4" /> 主动获客
-            </TabsTrigger>
-            <TabsTrigger value="growth" className="rounded-[6px]">
-              <Users className="h-4 w-4" /> 受众增长
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={copyQueries} className="tech-secondary flex-1 hover:shadow-[0_0_15px_rgba(255,255,255,0.03)] sm:flex-none">
-            <Copy className="h-4 w-4" /> Grok 提示词
-          </Button>
-          <Button onClick={downloadCsv} className="tech-cta flex-1 hover:shadow-[0_0_15px_rgba(255,255,255,0.03)] sm:flex-none">
-            <Download className="h-4 w-4" /> 导出 CSV
-          </Button>
-        </div>
-      </div>
-    </header>
   );
 }
 function HeroPanel({
@@ -3653,7 +3681,7 @@ function GrokBridgePanel({
   const isAccountRadar = variant === "account";
   const activeResult = isAccountRadar ? accountResult : grokResult;
   const activeResultField: keyof GrokBridgeState = isAccountRadar ? "accountResult" : "grokResult";
-  const [bridgeMessage, setBridgeMessage] = useState(isAccountRadar ? "输入竞品、KOL、社区账号或高价值目标用户账号，账号雷达会生成可导入的互动线索。" : "按左侧定位生成 Grok 搜索指令，找到公开讨论后导入互动队列。");
+  const [bridgeMessage, setBridgeMessage] = useState(isAccountRadar ? "输入竞品、KOL、社区账号或高价值目标用户账号，竞品洞察会对比定位、分析受众并生成可导入的互动线索。" : "按左侧定位生成 Grok 搜索指令，找到公开讨论后导入互动队列。");
   const [bridgeState, setBridgeState] = useState<"idle" | "loading" | "error">("idle");
   const [isProxyConfigReady, setIsProxyConfigReady] = useState(false);
   const [proxyConfig, setProxyConfig] = useState<GrokProxyConfig>(() => normalizeGrokProxyConfig({}) as GrokProxyConfig);
@@ -3779,7 +3807,7 @@ function GrokBridgePanel({
     if (!apiKey) {
       setBridgeState("error");
       setProxySearchResult(null);
-      setBridgeMessage("请先到设置页面配置 codeproxy / Grok 密钥，然后再使用账号雷达分析 X 账号。");
+      setBridgeMessage("请先到设置页面配置 codeproxy / Grok 密钥，然后再使用竞品洞察分析 X 账号。");
       return;
     }
     if (!profileUrl) {
@@ -3805,10 +3833,10 @@ function GrokBridgePanel({
           profileUrl,
         }),
       });
-      const data = (await response.json().catch(() => ({ message: "账号雷达分析失败。" }))) as GrokProxyApiResponse;
+      const data = (await response.json().catch(() => ({ message: "竞品洞察分析失败。" }))) as GrokProxyApiResponse;
 
       if (!response.ok || !data.ok || !data.text) {
-        throw new Error(data.message || "账号雷达分析失败。");
+        throw new Error(data.message || "竞品洞察分析失败。");
       }
 
       const structuredSignals = Array.isArray(data.signals) ? data.signals : [];
@@ -3828,13 +3856,13 @@ function GrokBridgePanel({
       const usernameLabel = pulledProfile?.username ? ` @${pulledProfile.username}` : "";
       const warningLabel = pulledProfile?.warnings?.length ? ` 有 ${pulledProfile.warnings.length} 个公开数据源未成功，不影响已拿到的数据。` : "";
       setBridgeState("idle");
-      const successMessage = `账号雷达已分析${usernameLabel}，并生成可导入的互动线索。${sourceCount ? `读取 ${sourceCount} 个公开数据源。` : ""}请确认预览结果，再导入互动队列。${warningLabel}`;
+      const successMessage = `竞品洞察已分析${usernameLabel}，并生成可导入的互动线索。${sourceCount ? `读取 ${sourceCount} 个公开数据源。` : ""}请确认预览结果，再导入互动队列。${warningLabel}`;
       setBridgeMessage(successMessage);
-      showToast("账号雷达分析完成。", "success");
+      showToast("竞品洞察分析完成。", "success");
     } catch (error) {
       setBridgeState("error");
       setProxySearchResult(null);
-      const errorMessage = error instanceof Error ? error.message : "账号雷达分析失败。";
+      const errorMessage = error instanceof Error ? error.message : "竞品洞察分析失败。";
       setBridgeMessage(errorMessage);
       showToast(errorMessage, "error");
     }
@@ -3928,7 +3956,7 @@ function GrokBridgePanel({
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 border-b border-white/[0.08] bg-[#0d0d10]/70">
         <div>
           <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">
-            {isAccountRadar ? <Radar className="mr-1 h-3.5 w-3.5" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />} {isAccountRadar ? "账号雷达" : "Grok 找讨论"}
+            {isAccountRadar ? <Radar className="mr-1 h-3.5 w-3.5" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />} {isAccountRadar ? "竞品洞察" : "Grok 找讨论"}
           </Badge>
           <CardTitle className="mt-3 text-xl text-white">{isAccountRadar ? "从竞品/KOL账号挖线索" : "用 Grok 找目标用户"}</CardTitle>
           <CardDescription className="mt-2 text-white/60">{isAccountRadar ? "单独输入一个公开 X 账号，围绕它的受众和讨论生成可导入的互动线索。" : "按定位生成 Prompt，去 Grok 找公开讨论；找到结果后导入互动队列。"}</CardDescription>
@@ -3943,9 +3971,9 @@ function GrokBridgePanel({
           <section className="grid gap-3 rounded-lg border border-emerald-300/15 bg-emerald-400/[0.045] p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">账号雷达</Badge>
-                <h3 className="mt-3 text-lg font-bold text-white">从竞品/KOL账号挖线索</h3>
-                <p className="mt-2 text-sm leading-6 text-white/60">输入竞品、行业 KOL、社区账号或目标用户账号，围绕它的公开资料、受众语境和相关讨论生成可互动线索。</p>
+                <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">竞品洞察</Badge>
+                <h3 className="mt-3 text-lg font-bold text-white">看定位差异，再从竞品受众中找机会</h3>
+                <p className="mt-2 text-sm leading-6 text-white/60">输入竞品、行业 KOL、社区账号或目标用户账号，对比定位、受众重叠和机会空白，再生成可互动线索。</p>
               </div>
               <Radar className="mt-1 h-5 w-5 shrink-0 text-emerald-100/80" />
             </div>
@@ -3961,16 +3989,16 @@ function GrokBridgePanel({
                 分析账号并生成线索
               </Button>
             </div>
-            <p className="text-xs leading-5 text-white/40">这是独立获客入口，适合输入竞品、KOL、社区账号或高价值目标用户，从他们的受众和讨论里挖出今天值得互动的人。</p>
+            <p className="text-xs leading-5 text-white/40">这是主流程之外的可选洞察工具：先看定位和受众差异，再从竞品、KOL 或社区账号周围挖出今天值得互动的人。</p>
             <AccountRadarOpportunityPanel current={current} profileUrl={xProfileUrl} pulledProfile={proxySearchResult?.pulledProfile ?? null} insight={proxySearchResult?.accountRadar ?? null} />
             {proxySearchResult?.pulledProfile ? (
               <div className="rounded-md border border-emerald-300/15 bg-[#0d0d10]/50 p-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">账号雷达已分析</Badge>
+                  <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">竞品洞察已完成</Badge>
                   {proxySearchResult.pulledProfile.username ? <span className="font-mono text-xs text-white/65">@{proxySearchResult.pulledProfile.username}</span> : null}
                   {typeof proxySearchResult.pulledProfile.textLength === "number" ? <span className="text-xs text-white/40">公开资料 {proxySearchResult.pulledProfile.textLength} 字，已用于挖线索</span> : null}
                 </div>
-                <p className="mt-2 text-xs leading-5 text-emerald-50/65">这些公开资料已经参与账号雷达分析；下面候选结果会变成可评分、可生成回复、可追踪反馈的互动队列。</p>
+                <p className="mt-2 text-xs leading-5 text-emerald-50/65">这些公开资料已经参与竞品洞察；下面候选结果会变成可评分、可生成回复、可追踪反馈的互动队列。</p>
                 {pulledProfilePreviewLines.length > 0 ? (
                   <div className="mt-2 grid gap-1.5">
                     {pulledProfilePreviewLines.map((line, index) => (
@@ -3988,41 +4016,95 @@ function GrokBridgePanel({
             ) : null}
           </section>
         ) : (
-          <section className="grid gap-3 rounded-lg border border-blue-300/15 bg-blue-400/[0.045] p-4 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-center">
-            <div className="min-w-0">
-              <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">Grok 找讨论</Badge>
-              <h3 className="mt-3 text-lg font-bold text-white">按定位找公开讨论</h3>
-              <p className="mt-2 text-sm leading-6 text-white/60">根据左侧定位生成搜索指令，去 Grok 找公开讨论；拿到结果后导入互动队列继续评分和生成回复。</p>
+          <section className="grid gap-4 rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">选择执行方式</Badge>
+                <h3 className="mt-3 text-lg font-bold text-white">手动搜索，或让工作台自动查询</h3>
+                <p className="mt-2 text-sm leading-6 text-white/55">两种方式使用同一份定位和 Prompt，结果最终都会导入互动队列。</p>
+              </div>
+              <span className="text-xs text-white/35">任选一种即可</span>
             </div>
-            <Button className="tech-cta w-full justify-center" onClick={() => openGrok(true)} disabled={bridgeState === "loading"}>
-              <Copy className="h-4 w-4" /> 复制 Prompt 并打开 Grok
-            </Button>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="flex min-h-[230px] flex-col rounded-lg border border-blue-300/20 bg-blue-400/[0.055] p-4 shadow-lg shadow-blue-950/10">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">方式 1 · 手动</Badge>
+                    <h4 className="mt-3 font-bold text-white">在 Grok 页面手动搜索</h4>
+                  </div>
+                  <Copy className="h-5 w-5 shrink-0 text-blue-100/75" />
+                </div>
+                <p className="mt-2 text-sm leading-6 text-white/55">适合先试流程，或者暂时不配置中转密钥。你需要把 Grok 返回结果复制回工作台。</p>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-blue-100/65">
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">1 复制 Prompt</span>
+                  <ArrowRight className="h-3 w-3 text-white/25" />
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">2 打开 Grok</span>
+                  <ArrowRight className="h-3 w-3 text-white/25" />
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">3 粘贴结果</span>
+                </div>
+                <Button variant="outline" className="tech-secondary mt-auto w-full justify-center" onClick={() => openGrok(true)} disabled={bridgeState === "loading"}>
+                  <Copy className="h-4 w-4" /> 复制 Prompt 并打开 Grok
+                </Button>
+              </div>
+
+              <div className="flex min-h-[230px] flex-col rounded-lg border border-emerald-300/20 bg-emerald-400/[0.055] p-4 shadow-lg shadow-emerald-950/10">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">方式 2 · 自动</Badge>
+                      <Badge variant="outline" className={cn("rounded-md", hasProxyKey ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-amber-500/10 bg-amber-500/10 text-amber-300")}>
+                        {isProxyConfigReady ? (hasProxyKey ? "中转已配置" : "需要配置密钥") : "读取配置中"}
+                      </Badge>
+                    </div>
+                    <h4 className="mt-3 font-bold text-white">通过中转一键查询</h4>
+                  </div>
+                  <Bot className="h-5 w-5 shrink-0 text-emerald-100/75" />
+                </div>
+                <p className="mt-2 text-sm leading-6 text-white/55">工作台自动提交当前 Prompt，并把返回内容解析成待确认线索；无需打开 Grok 页面来回复制。</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/40">
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">自动查询</span>
+                  <ArrowRight className="h-3 w-3 text-white/25" />
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">确认结果</span>
+                  <ArrowRight className="h-3 w-3 text-white/25" />
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">导入队列</span>
+                  <span className="ml-auto truncate font-mono">{effectiveProxyModel}</span>
+                </div>
+                <div className="mt-auto grid gap-2 sm:grid-cols-2">
+                  <Button asChild variant="outline" className="tech-secondary">
+                    <Link href="/settings">
+                      <Settings className="h-4 w-4" /> 配置中转
+                    </Link>
+                  </Button>
+                  <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled={bridgeState === "loading"}>
+                    {bridgeState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    {bridgeState === "loading" ? "自动查询中" : "一键自动查询"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </section>
         )}
-        <div className="grid gap-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={cn("rounded-md", hasProxyKey ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-amber-500/10 bg-amber-500/10 text-amber-300")}>
-                {isProxyConfigReady ? (hasProxyKey ? "中转已配置" : "未配置中转密钥") : "读取配置中"}
-              </Badge>
-              <span className="truncate font-mono text-xs text-white/45">{effectiveProxyModel}</span>
+        {isAccountRadar ? (
+          <div className="grid gap-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className={cn("rounded-md", hasProxyKey ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-amber-500/10 bg-amber-500/10 text-amber-300")}>
+                  {isProxyConfigReady ? (hasProxyKey ? "中转已配置" : "未配置中转密钥") : "读取配置中"}
+                </Badge>
+                <span className="truncate font-mono text-xs text-white/45">{effectiveProxyModel}</span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-white/45">密钥配置已移到独立设置页。竞品洞察会用它分析公开账号并生成线索。</p>
             </div>
-            <p className="mt-2 text-xs leading-5 text-white/45">{isAccountRadar ? "密钥配置已移到独立设置页。账号雷达会用它分析公开账号并生成线索。" : "密钥配置已移到独立设置页。主工作台只读取本地配置，用于发起中转查询和导入结果。"}</p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[auto_auto]">
-            <Button asChild variant="outline" className="tech-secondary">
-              <Link href="/settings">
-                <Settings className="h-4 w-4" /> 配置中转
-              </Link>
-            </Button>
-            {!isAccountRadar ? (
-              <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled={bridgeState === "loading"}>
-                {bridgeState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {bridgeState === "loading" ? "查询中" : "按 Prompt 查询"}
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[auto]">
+              <Button asChild variant="outline" className="tech-secondary">
+                <Link href="/settings">
+                  <Settings className="h-4 w-4" /> 配置中转
+                </Link>
               </Button>
-            ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {bridgeState === "loading" ? (
           <div className="relative overflow-hidden rounded-lg border border-blue-400/15 bg-blue-400/[0.06] p-4 text-blue-50 shadow-2xl shadow-blue-500/5">
@@ -4048,7 +4130,7 @@ function GrokBridgePanel({
                     {proxySearchResult.structured ? "结构化结果" : "文本回退"}
                   </Badge>
                 </div>
-                <h3 className="mt-3 text-base font-bold text-white">{isAccountRadar ? "是否导入这批账号雷达线索？" : "是否导入这批 Grok 结果？"}</h3>
+                <h3 className="mt-3 text-base font-bold text-white">{isAccountRadar ? "是否导入这批竞品洞察线索？" : "是否导入这批 Grok 结果？"}</h3>
                 <p className="mt-1 text-sm leading-6 text-white/55">模型：{proxySearchResult.model}。已解析 {importPreview.parsedCount} 条，可导入 {importPreview.importableCount} 条，重复 {importPreview.duplicateCount} 条{importPreview.excludedOwnCount ? "，已排除自己账号 " + importPreview.excludedOwnCount + " 条" : ""}。</p>
                 {!proxySearchResult.structured && proxySearchResult.parseError ? <p className="mt-1 text-xs text-amber-200/70">JSON 解析未命中，已自动回退到文本解析。</p> : null}
               </div>
@@ -4129,7 +4211,7 @@ function GrokBridgePanel({
 
           <div className="grid gap-2">
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs font-bold uppercase text-white/45">{isAccountRadar ? "账号雷达线索" : "Grok 结果"}</Label>
+              <Label className="text-xs font-bold uppercase text-white/45">{isAccountRadar ? "竞品洞察线索" : "Grok 结果"}</Label>
               <Button variant="outline" size="sm" className="tech-secondary" onClick={importGrokResult} disabled={bridgeState === "loading"}>
                 导入结果
               </Button>
@@ -4140,7 +4222,7 @@ function GrokBridgePanel({
                 updateGrokBridgeField(activeResultField, event.target.value);
                 setProxySearchResult(null);
               }}
-              placeholder={isAccountRadar ? "账号雷达生成的线索会出现在这里，也可以粘贴 X | 作者 | 链接 | 摘要 格式结果。" : "Grok 或 codeproxy 返回的结果会出现在这里。推荐格式：X | 作者 | 链接 | 摘要"}
+              placeholder={isAccountRadar ? "竞品洞察生成的线索会出现在这里，也可以粘贴 X | 作者 | 链接 | 摘要 格式结果。" : "Grok 或 codeproxy 返回的结果会出现在这里。推荐格式：X | 作者 | 链接 | 摘要"}
               className="min-h-[220px] resize-none border-white/[0.08] bg-[#0d0d10]/80 text-sm leading-6 text-white placeholder:text-white/35"
             />
             <SignalImportPreview preview={importPreview} />
@@ -4193,7 +4275,7 @@ function AccountRadarOpportunityPanel({
   const productName = shortValue(current.productName, "你的产品/账号");
   const accountName = pulledProfile?.username ? `@${pulledProfile.username}` : accountLabelFromUrl(profileUrl);
   const productPosition = shortValue(current.description, "先填写产品描述，AI 会更容易判断你和目标账号的差异。");
-  const targetAudience = shortValue(current.targetCustomer, "目标用户越清楚，账号雷达越能筛出值得互动的人。");
+  const targetAudience = shortValue(current.targetCustomer, "目标用户越清楚，竞品洞察越能筛出值得互动的人。");
   const targetPosition = shortValue(insight?.competitorPosition, pulledProfile ? "已读取公开资料，等待 AI 判断它吸引了哪类受众。" : "输入竞品、KOL 或社区账号后，会判断它吸引了哪类受众。");
   const ourPosition = shortValue(insight?.ourPosition, productPosition);
   const overlap = shortValue(insight?.audienceOverlap, `寻找与「${targetAudience}」重叠的人群。`);
@@ -4206,7 +4288,7 @@ function AccountRadarOpportunityPanel({
     <div className="grid gap-3 rounded-lg border border-white/[0.08] bg-[#0d0d10]/45 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-xs font-bold uppercase text-white/40">竞品对比作战板</p>
+          <p className="text-xs font-bold uppercase text-white/40">竞品定位对比</p>
           <h4 className="mt-1 text-sm font-bold text-white">先判断差异，再决定找谁互动</h4>
         </div>
         <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">
@@ -4957,10 +5039,11 @@ function GrowthCard({ item, signal, onStatusChange, onFeedbackChange, onUsedDraf
           <ScorePanel score={item.score} label={item.label} />
         </div>
         <ReasonList reasons={item.reasons} />
-        <div className="grid gap-3 xl:grid-cols-3">
+        <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-4">
           <DraftBlock icon={<MessageSquareText className="h-4 w-4" />} title="直接回复" description="发到原帖或评论下面，用来先建立互动。" value={item.replyDraft} source={draftSourceForItem(item)} />
           <DraftBlock icon={<Quote className="h-4 w-4" />} title="引用转发" description="引用这条内容再发表自己的观点。" value={item.quoteDraft} source={draftSourceForItem(item)} />
           <DraftBlock icon={<Lightbulb className="h-4 w-4" />} title="内容选题" description="把这个信号延展成你自己的原创帖。" value={item.postIdea} source={draftSourceForItem(item)} />
+          <DraftBlock icon={<Target className="h-4 w-4" />} title="私下跟进" description="对方有明确需求时用于私信或后续交流，不要硬卖。" value={item.outreachDraft} source={draftSourceForItem(item)} />
         </div>
       </div>
     </div>
@@ -5187,14 +5270,3 @@ function DraftBlock({ icon, title, value, description, source }: { icon: ReactNo
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-

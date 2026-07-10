@@ -170,11 +170,13 @@
 
     const readers = splitList(profile.targetReaders);
     const pillars = splitList(profile.contentPillars);
+    const goals = splitList(profile.growthGoals);
     const positionTokens = tokenize(profile.positioning);
     const fallbackTerms = ["AI Coding", "独立开发者", "0 流量"];
     const phrases = unique([
       ...pillars,
       ...readers,
+      ...goals,
       ...positionTokens.slice(0, 4),
       ...fallbackTerms,
     ]).slice(0, 12);
@@ -274,6 +276,10 @@
       score += 25;
       reasons.push("可回复痛点");
     }
+    if (containsAny(text, INTENT_TERMS)) {
+      score += 15;
+      reasons.push("潜在需求信号");
+    }
     if (containsAny(text, ["转发", "引用", "讨论", "分享", "thread", "launch", "上线"])) {
       score += 10;
       reasons.push("适合公开互动");
@@ -314,11 +320,15 @@
     const reply = `这个点很真实。${pain} 时，先别急着做大功能，第一批用户可以从 20 个同类人的真实问题里挖，再把反馈沉淀成产品迭代和内容选题。`;
     const quote = `${pillar} 能把产品做快，但增长还是要回到真实用户。这个案例适合 ${reader} 看：先找问题密度高的人，再决定做什么。`;
     const postIdea = `从「${shorten(note, 28)}」延展一条原创帖：产品上线 0 流量时，独立开发者如何用 AI 找到第一批用户。`;
+    const identity = cleanText(profile.accountName) || "我";
+    const positioning = shorten(cleanText(profile.positioning) || `${pillar} 实践`, 36);
+    const outreach = `${candidate.name || "你好"}，看到你提到「${pain}」。我是 ${identity}，主要在做 ${positioning}。如果你愿意，我可以结合你的场景分享一个更具体的做法，看看是否有帮助。`;
 
     return {
       reply: reply.length <= 220 ? reply : `${reply.slice(0, 217)}...`,
       quote: quote.length <= 220 ? quote : `${quote.slice(0, 217)}...`,
       postIdea,
+      outreach: outreach.length <= 220 ? outreach : `${outreach.slice(0, 217)}...`,
       action: candidate.label === "Engage now" ? "优先回复或引用" : candidate.label === "Watch" ? "收藏观察" : "暂时跳过",
     };
   }
@@ -351,6 +361,7 @@
           replyDraft: drafts.reply,
           quoteDraft: drafts.quote,
           postIdea: drafts.postIdea,
+          outreachDraft: drafts.outreach,
           action: drafts.action,
         };
       })

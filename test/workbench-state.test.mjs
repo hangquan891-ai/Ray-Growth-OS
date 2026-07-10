@@ -176,6 +176,7 @@ test("normalizeWorkbenchState keeps AI draft overrides by mode", () => {
           replyDraft: "AI reply",
           quoteDraft: "AI quote",
           postIdea: "AI post",
+          outreachDraft: "AI outreach",
           rationale: "matches historical winners",
           toneNotes: "specific and low-hype",
           model: "gpt-5.5",
@@ -189,6 +190,7 @@ test("normalizeWorkbenchState keeps AI draft overrides by mode", () => {
 
   assert.equal(normalized.aiDrafts.growth["url:https://x.com/a/status/1"].replyDraft, "AI reply");
   assert.equal(normalized.aiDrafts.growth["url:https://x.com/a/status/1"].quoteDraft, "AI quote");
+  assert.equal(normalized.aiDrafts.growth["url:https://x.com/a/status/1"].outreachDraft, "AI outreach");
   assert.equal(normalized.aiDrafts.growth["url:https://x.com/a/status/1"].model, "gpt-5.5");
   assert.deepEqual(normalized.aiDrafts.outbound, {});
 });

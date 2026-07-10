@@ -152,7 +152,7 @@ test("scoreGrowthOpportunity rewards target readers, content pillars, and replya
   assert.ok(strongScore.reasons.includes("可回复痛点"));
 });
 
-test("generateGrowthDrafts creates reply, quote, and post idea", () => {
+test("generateGrowthDrafts creates reply, quote, post idea, and outreach", () => {
   const candidate = {
     platform: "X",
     name: "AI indie founder",
@@ -168,7 +168,9 @@ test("generateGrowthDrafts creates reply, quote, and post idea", () => {
   assert.ok(drafts.reply.includes("第一批用户"));
   assert.ok(drafts.quote.includes("AI Coding"));
   assert.ok(drafts.postIdea.includes("0 流量"));
+  assert.ok(drafts.outreach.includes("AI indie founder"));
   assert.ok(drafts.reply.length <= 220);
+  assert.ok(drafts.outreach.length <= 220);
 });
 
 test("runGrowthWorkflow sorts opportunities and attaches growth drafts", () => {
@@ -186,6 +188,7 @@ X | AI indie founder | https://x.com/founder/status/1 | 独立开发者刚用 AI
   assert.ok(result.opportunities[0].replyDraft.length > 0);
   assert.ok(result.opportunities[0].quoteDraft.length > 0);
   assert.ok(result.opportunities[0].postIdea.length > 0);
+  assert.ok(result.opportunities[0].outreachDraft.length > 0);
 });
 
 

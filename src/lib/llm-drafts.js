@@ -83,6 +83,7 @@
       replyDraft: clean(draft?.replyDraft ?? draft?.draft ?? draft?.primaryDraft),
       quoteDraft: clean(draft?.quoteDraft),
       postIdea: clean(draft?.postIdea),
+      outreachDraft: clean(draft?.outreachDraft),
     };
   }
 
@@ -94,7 +95,7 @@
     return {
       drafts: drafts
         .map((draft) => normalizeAiDraft(draft, mode))
-        .filter((draft) => draft.itemId && (mode === "outbound" ? draft.draft : draft.replyDraft || draft.quoteDraft || draft.postIdea)),
+        .filter((draft) => draft.itemId && (mode === "outbound" ? draft.draft : draft.replyDraft || draft.quoteDraft || draft.postIdea || draft.outreachDraft)),
     };
   }
 
@@ -128,6 +129,7 @@
       replyDraft: override.replyDraft || item.replyDraft,
       quoteDraft: override.quoteDraft || item.quoteDraft,
       postIdea: override.postIdea || item.postIdea,
+      outreachDraft: override.outreachDraft || item.outreachDraft,
       aiDraft: override,
     };
   }
@@ -200,7 +202,7 @@
           "Do not hide the author's identity or product completely when profile.productContext is provided; mention it lightly when it adds trust or context.",
           "Every replyDraft should serve profile.replyGoal: include a natural next step, question, or reason to continue the conversation without sounding like an ad.",
           "Keep reply drafts concise enough for X replies.",
-          "For growth mode, make replyDraft directly usable, quoteDraft suitable for quoting, and postIdea useful as a later content seed.",
+          "For growth mode, make replyDraft directly usable, quoteDraft suitable for quoting, postIdea useful as a later content seed, and outreachDraft suitable for a private follow-up without hard selling.",
         ],
       },
       styleSamples: buildStyleSamples(feedbackSignals),
@@ -217,7 +219,7 @@
         localDrafts:
           mode === "outbound"
             ? { draft: clean(item?.draft) }
-            : { replyDraft: clean(item?.replyDraft), quoteDraft: clean(item?.quoteDraft), postIdea: clean(item?.postIdea) },
+            : { replyDraft: clean(item?.replyDraft), quoteDraft: clean(item?.quoteDraft), postIdea: clean(item?.postIdea), outreachDraft: clean(item?.outreachDraft) },
       })),
     };
   }
@@ -233,8 +235,9 @@
             replyDraft: { type: "string" },
             quoteDraft: { type: "string" },
             postIdea: { type: "string" },
+            outreachDraft: { type: "string" },
           };
-    const draftRequired = mode === "outbound" ? ["draft"] : ["replyDraft", "quoteDraft", "postIdea"];
+    const draftRequired = mode === "outbound" ? ["draft"] : ["replyDraft", "quoteDraft", "postIdea", "outreachDraft"];
 
     return {
       type: "object",
