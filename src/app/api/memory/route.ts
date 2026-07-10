@@ -14,6 +14,7 @@ type MemoryMode = "outbound" | "growth";
 
 type MemoryRequest = {
   mode?: MemoryMode;
+  locale?: "zh-CN" | "en";
   profile?: unknown;
   sampleSummary?: unknown;
   samples?: unknown[];
@@ -93,7 +94,7 @@ function feedbackOf(sample: unknown) {
   return clean(source.feedback);
 }
 
-function buildFallbackMemory(payload: { sampleSummary?: unknown; samples?: unknown[] }) {
+function buildFallbackMemory(payload: { sampleSummary?: unknown; samples?: unknown[] }, locale: "zh-CN" | "en") {
   const samples = Array.isArray(payload.samples) ? payload.samples : [];
   const positiveSamples = samples.filter((sample) => ["got_reply", "followed", "reshared"].includes(feedbackOf(sample)));
   const noReplySamples = samples.filter((sample) => feedbackOf(sample) === "no_reply");
@@ -101,34 +102,38 @@ function buildFallbackMemory(payload: { sampleSummary?: unknown; samples?: unkno
   const weakKeywords = topKeywords(noReplySamples, 6).filter((word) => !effectiveKeywords.includes(word));
   const accountRadarKeywords = effectiveKeywords.slice(0, 6);
 
+  const english = locale === "en";
+
   return {
     summary: positiveSamples.length
-      ? `已从 ${samples.length} 条反馈样本里提炼：优先放大产生过正反馈的话题和痛点，降低无回复样本里的泛泛关键词。`
-      : `当前 ${samples.length} 条样本里正反馈不足，先用无回复样本反向收窄关键词，下一轮继续积累。`,
+      ? english
+        ? `From ${samples.length} feedback samples: prioritize topics and pain points with positive outcomes; deprioritize generic terms from no-reply samples.`
+        : `已从 ${samples.length} 条反馈样本里提炼：优先放大产生过正反馈的话题和痛点，降低无回复样本里的泛泛关键词。`
+      : english
+        ? `The current ${samples.length} samples have too little positive feedback. Narrow generic terms using no-reply samples, then collect another batch.`
+        : `当前 ${samples.length} 条样本里正反馈不足，先用无回复样本反向收窄关键词，下一轮继续积累。`,
     effectiveKeywords,
     weakKeywords,
     accountRadarKeywords,
     scoreBoostRules: effectiveKeywords.slice(0, 5).map((keyword) => ({
       pattern: keyword,
-      reason: "历史反馈样本里更容易产生继续互动，下一轮优先加权。",
+      reason: english ? "This pattern appeared more often in samples with continued interaction." : "历史反馈样本里更容易产生继续互动，下一轮优先加权。",
       weight: 6,
     })),
     scorePenaltyRules: weakKeywords.slice(0, 4).map((keyword) => ({
       pattern: keyword,
-      reason: "历史样本里更容易无回复，下一轮先降低优先级。",
+      reason: english ? "This pattern appeared more often in no-reply samples." : "历史样本里更容易无回复，下一轮先降低优先级。",
       weight: 4,
     })),
-    replyStyleRules: [
-      "先给一个具体可执行观点，再自然说明自己的相关经验或产品背景。",
-      "回复里保留提问或轻量下一步，目标是继续对话，不是直接硬卖。",
-      "优先围绕对方正在表达的痛点展开，少写泛泛的赞同。",
-    ],
-    avoidReplyPatterns: [
-      "不要一上来推产品或贴链接。",
-      "避免只有情绪认同，没有具体建议。",
-      "避免把回复写成广告口播。",
-    ],
-    nextExperiment: "下一轮先优先处理高痛点、可给具体建议的帖子；每处理完一批后继续标记有回复/无回复，再重新生成记忆。",
+    replyStyleRules: english
+      ? ["Lead with one actionable observation.", "Use a question only when it helps continue a relevant conversation.", "Address the stated pain point instead of giving generic agreement."]
+      : ["先给一个具体可执行观点。", "只有在有助于继续相关对话时再提问。", "优先围绕对方正在表达的痛点展开，少写泛泛的赞同。"],
+    avoidReplyPatterns: english
+      ? ["Do not lead with a product pitch or link.", "Avoid emotional agreement without a concrete point.", "Avoid ad-like copy."]
+      : ["不要一上来推产品或贴链接。", "避免只有情绪认同，没有具体建议。", "避免把回复写成广告口播。"],
+    nextExperiment: english
+      ? "Prioritize posts with a concrete pain point and a specific helpful angle. Mark outcomes after each batch, then regenerate learning."
+      : "下一轮先优先处理高痛点、可给具体建议的帖子；每处理完一批后继续标记有回复/无回复，再重新生成记忆。",
   };
 }
 
@@ -166,8 +171,10 @@ export async function POST(request: Request) {
 
   let response: Response;
   let responseJson: unknown;
+  const locale: "zh-CN" | "en" = body.locale === "en" ? "en" : "zh-CN";
   const payload = {
     mode,
+    locale,
     profile: body.profile,
     sampleSummary: body.sampleSummary,
     samples,
@@ -213,7 +220,7 @@ export async function POST(request: Request) {
 
   const outputText = extractResponseOutputText(responseJson);
   const parsed = outputText ? parsePossibleJson(outputText) : null;
-  const memorySource = parsed && typeof parsed === "object" ? parsed : buildFallbackMemory(payload);
+  const memorySource = parsed && typeof parsed === "object" ? parsed : buildFallbackMemory(payload, payload.locale);
   const memory = normalizeGrowthMemoryResponse(memorySource, payload);
 
   return NextResponse.json({

@@ -18,6 +18,7 @@ const {
 test("buildGrowthMemoryRequestInput extracts only feedback samples", () => {
   const payload = buildGrowthMemoryRequestInput({
     mode: "growth",
+    locale: "en",
     profile: { productName: "Ray", description: "AI Coding creator", targetCustomer: "indie devs" },
     signals: [
       {
@@ -46,6 +47,7 @@ test("buildGrowthMemoryRequestInput extracts only feedback samples", () => {
   assert.equal(payload.samples.length, 2);
   assert.equal(payload.sampleSummary.positive, 1);
   assert.equal(payload.sampleSummary.noReply, 1);
+  assert.equal(payload.locale, "en");
   assert.equal(payload.samples[0].score.score, 92);
   assert.equal(payload.samples[0].draft.replyDraft, "AI reply");
 });

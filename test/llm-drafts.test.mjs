@@ -31,6 +31,7 @@ test("buildDraftRequestInput includes queue items and positive style samples", (
 
   const payload = buildDraftRequestInput({
     mode: "growth",
+    locale: "en",
     profile: { productName: "Ray", description: "AI Coding creator" },
     items,
     feedbackSignals: [
@@ -54,6 +55,7 @@ test("buildDraftRequestInput includes queue items and positive style samples", (
   assert.equal(payload.items[0].localDrafts.outreachDraft, "local outreach");
   assert.equal(payload.styleSamples.length, 1);
   assert.equal(payload.styleSamples[0].actualReply, "share a concrete first-user loop");
+  assert.equal(payload.styleGuide.language, "English");
 });
 
 test("normalizeAiDraftResponse and applyAiDraftOverrides update generated drafts only", () => {

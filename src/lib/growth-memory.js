@@ -29,6 +29,10 @@
     return String(value ?? "").trim();
   }
 
+  function normalizeLocale(locale) {
+    return locale === "en" ? "en" : "zh-CN";
+  }
+
   function cleanList(value, limit = 8) {
     return Array.isArray(value)
       ? Array.from(new Set(value.map(clean).filter(Boolean))).slice(0, limit)
@@ -158,7 +162,7 @@
     };
   }
 
-  function buildGrowthMemoryRequestInput({ mode: modeInput, profile, signals, aiScores, aiDrafts }) {
+  function buildGrowthMemoryRequestInput({ mode: modeInput, profile, signals, aiScores, aiDrafts, locale }) {
     const mode = modeInput === "outbound" ? "outbound" : "growth";
     const scoreMap = aiScores && typeof aiScores === "object" ? aiScores : {};
     const draftMap = aiDrafts && typeof aiDrafts === "object" ? aiDrafts : {};
@@ -203,6 +207,7 @@
 
     return {
       mode,
+      locale: normalizeLocale(locale),
       profile: {
         productName: clean(profile?.productName),
         description: clean(profile?.description),
@@ -271,7 +276,7 @@
         {
           role: "system",
           content:
-            "You are the growth learning engine for Ray Growth OS. Read public interaction outcomes and extract practical, reversible growth memory. Return concise Chinese output only in the requested JSON schema.",
+            "Extract practical, reversible learning from public interaction outcomes. Compare observed outcomes without claiming causality that the samples do not support. Use payload.locale for every narrative field. Keep rules specific, testable, and grounded in the supplied samples. Return only the requested JSON object.",
         },
         {
           role: "user",
@@ -311,16 +316,17 @@
     });
   }
 
-  function buildGrowthMemoryPromptContext(memoryInput) {
+  function buildGrowthMemoryPromptContext(memoryInput, localeInput) {
     const memory = normalizeGrowthMemoryState(memoryInput);
+    const locale = normalizeLocale(localeInput);
     if (!memory.active) return "";
     const lines = [];
-    if (memory.summary) lines.push(`增长记忆摘要：${memory.summary}`);
-    if (memory.effectiveKeywords.length) lines.push(`优先寻找：${memory.effectiveKeywords.join(", ")}`);
-    if (memory.weakKeywords.length) lines.push(`降低优先级：${memory.weakKeywords.join(", ")}`);
-    if (memory.replyStyleRules.length) lines.push(`有效话术风格：${memory.replyStyleRules.join("；")}`);
-    if (memory.avoidReplyPatterns.length) lines.push(`避免：${memory.avoidReplyPatterns.join("；")}`);
-    if (memory.nextExperiment) lines.push(`下一轮实验：${memory.nextExperiment}`);
+    if (memory.summary) lines.push(`${locale === "en" ? "Learning summary" : "增长记忆摘要"}：${memory.summary}`);
+    if (memory.effectiveKeywords.length) lines.push(`${locale === "en" ? "Prioritize" : "优先寻找"}：${memory.effectiveKeywords.join(", ")}`);
+    if (memory.weakKeywords.length) lines.push(`${locale === "en" ? "Deprioritize" : "降低优先级"}：${memory.weakKeywords.join(", ")}`);
+    if (memory.replyStyleRules.length) lines.push(`${locale === "en" ? "Effective style" : "有效话术风格"}：${memory.replyStyleRules.join(locale === "en" ? "; " : "；")}`);
+    if (memory.avoidReplyPatterns.length) lines.push(`${locale === "en" ? "Avoid" : "避免"}：${memory.avoidReplyPatterns.join(locale === "en" ? "; " : "；")}`);
+    if (memory.nextExperiment) lines.push(`${locale === "en" ? "Next experiment" : "下一轮实验"}：${memory.nextExperiment}`);
     return lines.join("\n");
   }
 

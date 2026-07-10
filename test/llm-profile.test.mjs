@@ -23,6 +23,10 @@ test("buildProfileRequestInput maps growth form meanings", () => {
   assert.equal(input.fieldMeaning.productName, "账号名称");
   assert.equal(input.fieldMeaning.competitors, "增长目标");
   assert.equal(input.current.productName, "Ray");
+
+  const englishInput = buildProfileRequestInput({ mode: "growth", locale: "en", xProfileUrl: "https://x.com/example", current: {} });
+  assert.equal(englishInput.locale, "en");
+  assert.equal(englishInput.fieldMeaning.targetCustomer, "Target audience");
 });
 
 test("buildOpenAiProfileRequestBody creates a strict Responses API schema", () => {
@@ -36,7 +40,7 @@ test("buildOpenAiProfileRequestBody creates a strict Responses API schema", () =
   assert.equal(body.text.format.type, "json_schema");
   assert.equal(body.text.format.strict, true);
   assert.deepEqual(body.text.format.schema, schema);
-  assert.match(body.input[0].content, /onboarding positioning assistant/);
+  assert.match(body.input[0].content, /form-ready positioning/);
 });
 
 test("normalizeGeneratedProfile preserves practical defaults and trims long text", () => {
@@ -61,4 +65,8 @@ test("normalizeGeneratedProfile preserves practical defaults and trims long text
   assert.match(profile.replyGoal, /贡献/);
   assert.match(profile.productContext, /身份/);
   assert.ok(profile.description.length <= 260);
+
+  const englishProfile = normalizeGeneratedProfile({ profile: {} }, "growth", "en");
+  assert.match(englishProfile.replyGoal, /actionable idea/);
+  assert.match(englishProfile.productContext, /unverified claims/);
 });

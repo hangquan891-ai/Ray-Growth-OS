@@ -103,6 +103,7 @@ test("buildScoreRequestInput limits queue items and includes stable item ids", (
 
   const payload = buildScoreRequestInput({
     mode: "growth",
+    locale: "en",
     profile: {
       productName: "Ray",
       description: "AI Coding creator",
@@ -117,6 +118,7 @@ test("buildScoreRequestInput limits queue items and includes stable item ids", (
   assert.equal(payload.items[0].itemId, "url:https://x.com/maker/status/0");
   assert.equal(payload.items[0].localScore, 0);
   assert.equal(payload.items[0].text, "note 0");
+  assert.equal(payload.locale, "en");
 });
 
 

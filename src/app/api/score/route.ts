@@ -16,6 +16,7 @@ type ScoreMode = "outbound" | "growth";
 
 type ScoreRequest = {
   mode?: ScoreMode;
+  locale?: "zh-CN" | "en";
   profile?: unknown;
   rubric?: unknown;
   growthMemory?: unknown;
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
           model,
           payload: {
             mode,
+            locale: body.locale,
             profile: body.profile,
             rubric: body.rubric,
             growthMemory: body.growthMemory,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Bot, CheckCircle2, KeyRound, Radar, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
 
 import { ActionToastHost, showToast, type ActionToastTone } from "@/components/action-toast";
+import { LanguageToggle, useI18n } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,9 +35,9 @@ type XProfileConfig = {
   profileUrl: string;
 };
 
-function maskSecret(value: string) {
+function maskSecret(value: string, locale: "zh-CN" | "en") {
   const secret = value.trim();
-  if (!secret) return "未配置";
+  if (!secret) return locale === "en" ? "Not configured" : "未配置";
   if (secret.length <= 10) return `${secret.slice(0, 3)}***`;
   return `${secret.slice(0, 6)}...${secret.slice(-4)}`;
 }
@@ -46,12 +47,14 @@ function statusClass(hasKey: boolean) {
 }
 
 export default function SettingsPage() {
+  const { locale, t } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   const [grokApiKey, setGrokApiKey] = useState("");
   const [grokModel, setGrokModel] = useState(DEFAULT_GROK_PROXY_MODEL);
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiModel, setAiModel] = useState(DEFAULT_AI_RESPONSE_MODEL);
   const [xProfileUrl, setXProfileUrl] = useState("");
-  const [message, setMessage] = useState("这里配置 Grok 找人、GPT-5.5 评分/草稿，以及 AI 帮填定位使用的 X 主页。");
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     try {
@@ -69,7 +72,7 @@ export default function SettingsPage() {
       const xProfileConfig = normalizeXProfileConfig(storedXProfile ? JSON.parse(storedXProfile) : {}) as XProfileConfig;
       setXProfileUrl(xProfileConfig.profileUrl);
     } catch {
-      notify("本地配置读取失败，已回退为默认模型。可以重新保存一次。", "error");
+      notify(tr("本地配置读取失败，已回退为默认模型。可以重新保存一次。", "Local configuration could not be read. Default models were restored; save again to retry."), "error");
     }
   }, []);
 
@@ -88,9 +91,9 @@ export default function SettingsPage() {
       window.localStorage.setItem(GROK_PROXY_CONFIG_STORAGE_KEY, JSON.stringify(config));
       setGrokApiKey(config.apiKey);
       setGrokModel(config.model);
-      notify(config.apiKey ? "已保存 Grok 配置。现在可以回到工作台使用竞品洞察和中转查询。" : "已保存 Grok 默认模型，但还没有填写密钥。", config.apiKey ? "success" : "info");
+      notify(config.apiKey ? tr("已保存 Grok 配置。现在可以回到工作台使用竞品洞察和中转查询。", "Grok settings saved. You can now use competitor insights and proxy search.") : tr("已保存 Grok 默认模型，但还没有填写密钥。", "The default Grok model was saved, but no API key is configured yet."), config.apiKey ? "success" : "info");
     } catch {
-      notify("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "error");
+      notify(tr("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "Save failed because the browser blocked localStorage. Check private-mode or site permissions."), "error");
     }
   }
 
@@ -100,9 +103,9 @@ export default function SettingsPage() {
       window.localStorage.setItem(AI_RESPONSE_CONFIG_STORAGE_KEY, JSON.stringify(config));
       setAiApiKey(config.apiKey);
       setAiModel(config.model);
-      notify(config.apiKey ? "已保存 GPT-5.5 配置。评分和草稿生成会走 codeproxy.dev/v1/responses。" : "已保存 GPT-5.5 默认模型，但还没有填写密钥。", config.apiKey ? "success" : "info");
+      notify(config.apiKey ? tr("已保存 GPT-5.5 配置。评分和草稿生成会走 codeproxy.dev/v1/responses。", "AI settings saved. Scoring and drafts will use codeproxy.dev/v1/responses.") : tr("已保存 GPT-5.5 默认模型，但还没有填写密钥。", "The default AI model was saved, but no API key is configured yet."), config.apiKey ? "success" : "info");
     } catch {
-      notify("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "error");
+      notify(tr("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "Save failed because the browser blocked localStorage. Check private-mode or site permissions."), "error");
     }
   }
 
@@ -111,9 +114,9 @@ export default function SettingsPage() {
     try {
       window.localStorage.setItem(X_PROFILE_CONFIG_STORAGE_KEY, JSON.stringify(config));
       setXProfileUrl(config.profileUrl);
-      notify(config.profileUrl ? "已保存 X 主页地址。回到第 1 步后可以让 AI 生成一版定位草稿。" : "已保存空的 X 主页地址。需要填写后才可以 AI 帮填定位。", config.profileUrl ? "success" : "info");
+      notify(config.profileUrl ? tr("已保存 X 主页地址。回到第 1 步后可以让 AI 生成一版定位草稿。", "Public X profile saved. Return to positioning to generate a draft.") : tr("已保存空的 X 主页地址。需要填写后才可以 AI 帮填定位。", "An empty X profile was saved. Add a profile URL before using AI positioning."), config.profileUrl ? "success" : "info");
     } catch {
-      notify("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "error");
+      notify(tr("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "Save failed because the browser blocked localStorage. Check private-mode or site permissions."), "error");
     }
   }
 
@@ -122,7 +125,7 @@ export default function SettingsPage() {
       window.localStorage.removeItem(X_PROFILE_CONFIG_STORAGE_KEY);
     } catch {}
     setXProfileUrl("");
-    notify("已清空 X 主页地址。", "info");
+    notify(tr("已清空 X 主页地址。", "Public X profile cleared."), "info");
   }
 
   function clearGrokConfig() {
@@ -131,7 +134,7 @@ export default function SettingsPage() {
     } catch {}
     setGrokApiKey("");
     setGrokModel(DEFAULT_GROK_PROXY_MODEL);
-    notify("已清空 Grok 找人配置。", "info");
+    notify(tr("已清空 Grok 找人配置。", "Grok discovery settings cleared."), "info");
   }
 
   function clearAiConfig() {
@@ -140,18 +143,18 @@ export default function SettingsPage() {
     } catch {}
     setAiApiKey("");
     setAiModel(DEFAULT_AI_RESPONSE_MODEL);
-    notify("已清空 GPT-5.5 评分/草稿配置。", "info");
+    notify(tr("已清空 GPT-5.5 评分/草稿配置。", "AI scoring and draft settings cleared."), "info");
   }
 
   function clearWorkbenchData() {
-    const confirmed = window.confirm("只清空工作台测试数据、队列、反馈和增长记忆；Grok / GPT-5.5 密钥会保留。确认清空吗？");
+    const confirmed = window.confirm(tr("只清空工作台测试数据、队列、反馈和增长记忆；Grok / GPT-5.5 密钥会保留。确认清空吗？", "Clear local workbench data, queue items, feedback, and growth learning? Grok and AI keys will be kept."));
     if (!confirmed) return;
 
     try {
       window.localStorage.setItem(WORKBENCH_STORAGE_KEY, serializeWorkbenchState(DEFAULT_WORKBENCH_STATE));
-      notify("已清空工作台测试数据，密钥配置已保留。返回工作台后会从空白状态开始。", "success");
+      notify(tr("已清空工作台测试数据，密钥配置已保留。返回工作台后会从空白状态开始。", "Local workbench data was cleared and API settings were kept. The workbench will start empty."), "success");
     } catch {
-      notify("清空失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "error");
+      notify(tr("清空失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "Clear failed because the browser blocked localStorage. Check private-mode or site permissions."), "error");
     }
   }
 
@@ -168,16 +171,19 @@ export default function SettingsPage() {
         <div className="fade-up flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <Badge variant="outline" className="rounded-md border-white/[0.08] bg-white/[0.04] text-white/70">
-              <KeyRound className="mr-1 h-3.5 w-3.5" /> 密钥设置
+              <KeyRound className="mr-1 h-3.5 w-3.5" /> {t("keySettings")}
             </Badge>
-            <h1 className="mt-4 text-3xl font-black text-white sm:text-5xl">AI 接口配置</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">Grok 用来找讨论和做竞品洞察，GPT-5.5 用来评分和生成草稿。两者都通过 codeproxy.dev 中转，请分别保存密钥和模型。</p>
+            <h1 className="mt-4 text-3xl font-black text-white sm:text-5xl">{t("apiSettings")}</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">{tr("Grok 用来找讨论和做竞品洞察，GPT-5.5 用来评分和生成草稿。两者都通过 codeproxy.dev 中转，请分别保存密钥和模型。", "Grok discovers public discussions and competitor opportunities. The AI model scores signals and generates drafts. Save each key and model separately.")}</p>
           </div>
-          <Button asChild variant="outline" className="tech-secondary w-full sm:w-auto">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+          <LanguageToggle />
+          <Button asChild variant="outline" className="tech-secondary flex-1 sm:flex-none">
             <Link href="/">
-              <ArrowLeft className="h-4 w-4" /> 返回工作台
+              <ArrowLeft className="h-4 w-4" /> {t("backToWorkbench")}
             </Link>
           </Button>
+          </div>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-2">
@@ -186,44 +192,44 @@ export default function SettingsPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-xl text-white">
-                    <Radar className="h-5 w-5 text-blue-200" /> Grok 找人
+                    <Radar className="h-5 w-5 text-blue-200" /> {t("grokSearch")}
                   </CardTitle>
-                  <CardDescription className="mt-2 text-white/55">用于 Grok 找讨论、竞品洞察与竞品/KOL 受众挖掘，并生成可导入 Signal。</CardDescription>
+                  <CardDescription className="mt-2 text-white/55">{tr("用于 Grok 找讨论、竞品洞察与竞品/KOL 受众挖掘，并生成可导入 Signal。", "Use Grok to discover public discussions, inspect competitors or KOL audiences, and return importable signals.")}</CardDescription>
                 </div>
-                <Badge variant="outline" className={statusClass(grokHasKey)}>{grokHasKey ? "已配置" : "未配置"}</Badge>
+                <Badge variant="outline" className={statusClass(grokHasKey)}>{grokHasKey ? t("configured") : t("notConfigured")}</Badge>
               </div>
             </CardHeader>
             <CardContent className="grid gap-5 p-5 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_190px]">
                 <div className="grid gap-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-white/45">Grok / codeproxy 密钥</Label>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-white/45">Grok / codeproxy {tr("密钥", "API key")}</Label>
                   <Input type="password" value={grokApiKey} onChange={(event) => setGrokApiKey(event.target.value)} placeholder="sk-..." className="border-white/[0.08] bg-[#0d0d10]/80 text-white placeholder:text-white/35" autoComplete="off" />
                 </div>
                 <div className="grid gap-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-white/45">Grok 模型</Label>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-white/45">Grok {tr("模型", "model")}</Label>
                   <Input value={grokModel} onChange={(event) => setGrokModel(event.target.value)} placeholder={DEFAULT_GROK_PROXY_MODEL} className="border-white/[0.08] bg-[#0d0d10]/80 text-white placeholder:text-white/35" />
                 </div>
               </div>
               <div className="grid gap-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-4 text-sm text-white/65 sm:grid-cols-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">接口</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("接口", "Endpoint")}</p>
                   <p className="mt-2 break-all font-mono text-xs text-blue-200/80">{CODEPROXY_MESSAGES_URL}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">模型</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("模型", "Model")}</p>
                   <p className="mt-2 font-mono text-xs text-white/75">{grokModel.trim() || DEFAULT_GROK_PROXY_MODEL}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">密钥</p>
-                  <p className="mt-2 font-mono text-xs text-white/75">{maskSecret(grokApiKey)}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("密钥", "API key")}</p>
+                  <p className="mt-2 font-mono text-xs text-white/75">{maskSecret(grokApiKey, locale)}</p>
                 </div>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button variant="outline" className="tech-secondary" onClick={clearGrokConfig}>
-                  <Trash2 className="h-4 w-4" /> 清空
+                  <Trash2 className="h-4 w-4" /> {t("clear")}
                 </Button>
                 <Button className="tech-cta" onClick={saveGrokConfig}>
-                  <Save className="h-4 w-4" /> 保存 Grok 配置
+                  <Save className="h-4 w-4" /> {tr("保存 Grok 配置", "Save Grok settings")}
                 </Button>
               </div>
             </CardContent>
@@ -234,44 +240,44 @@ export default function SettingsPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-xl text-white">
-                    <Bot className="h-5 w-5 text-blue-200" /> GPT-5.5 评分/草稿
+                    <Bot className="h-5 w-5 text-blue-200" /> {t("aiScoringDrafts")}
                   </CardTitle>
-                  <CardDescription className="mt-2 text-white/55">用于 AI 语义评分、下一步建议和回复草稿生成。</CardDescription>
+                  <CardDescription className="mt-2 text-white/55">{tr("用于 AI 语义评分、下一步建议和回复草稿生成。", "Use the AI model for semantic scoring, next-step suggestions, and reply drafts.")}</CardDescription>
                 </div>
-                <Badge variant="outline" className={statusClass(aiHasKey)}>{aiHasKey ? "已配置" : "未配置"}</Badge>
+                <Badge variant="outline" className={statusClass(aiHasKey)}>{aiHasKey ? t("configured") : t("notConfigured")}</Badge>
               </div>
             </CardHeader>
             <CardContent className="grid gap-5 p-5 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_190px]">
                 <div className="grid gap-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-white/45">GPT-5.5 / codeproxy 密钥</Label>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-white/45">GPT-5.5 / codeproxy {tr("密钥", "API key")}</Label>
                   <Input type="password" value={aiApiKey} onChange={(event) => setAiApiKey(event.target.value)} placeholder="sk-..." className="border-white/[0.08] bg-[#0d0d10]/80 text-white placeholder:text-white/35" autoComplete="off" />
                 </div>
                 <div className="grid gap-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-white/45">评分/草稿模型</Label>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-white/45">{tr("评分/草稿模型", "Scoring & draft model")}</Label>
                   <Input value={aiModel} onChange={(event) => setAiModel(event.target.value)} placeholder={DEFAULT_AI_RESPONSE_MODEL} className="border-white/[0.08] bg-[#0d0d10]/80 text-white placeholder:text-white/35" />
                 </div>
               </div>
               <div className="grid gap-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-4 text-sm text-white/65 sm:grid-cols-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">接口</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("接口", "Endpoint")}</p>
                   <p className="mt-2 break-all font-mono text-xs text-blue-200/80">{CODEPROXY_RESPONSES_URL}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">模型</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("模型", "Model")}</p>
                   <p className="mt-2 font-mono text-xs text-white/75">{aiModel.trim() || DEFAULT_AI_RESPONSE_MODEL}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">密钥</p>
-                  <p className="mt-2 font-mono text-xs text-white/75">{maskSecret(aiApiKey)}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("密钥", "API key")}</p>
+                  <p className="mt-2 font-mono text-xs text-white/75">{maskSecret(aiApiKey, locale)}</p>
                 </div>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button variant="outline" className="tech-secondary" onClick={clearAiConfig}>
-                  <Trash2 className="h-4 w-4" /> 清空
+                  <Trash2 className="h-4 w-4" /> {t("clear")}
                 </Button>
                 <Button className="tech-cta" onClick={saveAiConfig}>
-                  <Save className="h-4 w-4" /> 保存 GPT-5.5 配置
+                  <Save className="h-4 w-4" /> {tr("保存 AI 配置", "Save AI settings")}
                 </Button>
               </div>
             </CardContent>
@@ -283,41 +289,41 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2 text-xl text-white">
-                  <UserRound className="h-5 w-5 text-blue-200" /> X 账号主页
+                  <UserRound className="h-5 w-5 text-blue-200" /> {t("xProfile")}
                 </CardTitle>
-                <CardDescription className="mt-2 text-white/55">用于第 1 步的 AI 帮填定位：根据你的公开主页地址和已填内容，生成账号定位、目标读者、内容支柱和回复策略草稿。</CardDescription>
+                <CardDescription className="mt-2 text-white/55">{tr("用于第 1 步的 AI 帮填定位：根据你的公开主页地址和已填内容，生成账号定位、目标读者、内容支柱和回复策略草稿。", "Used for AI positioning: the public profile URL and your current inputs help generate a draft positioning, audience, topics, and engagement strategy.")}</CardDescription>
               </div>
-              <Badge variant="outline" className={statusClass(xProfileSaved)}>{xProfileSaved ? "已保存" : "未填写"}</Badge>
+              <Badge variant="outline" className={statusClass(xProfileSaved)}>{xProfileSaved ? tr("已保存", "Saved") : tr("未填写", "Empty")}</Badge>
             </div>
           </CardHeader>
           <CardContent className="grid gap-4 p-5 sm:p-6">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <div className="grid gap-2">
-                <Label className="text-xs font-bold uppercase tracking-wider text-white/45">X 主页地址</Label>
+                <Label className="text-xs font-bold uppercase tracking-wider text-white/45">{tr("X 主页地址", "Public X profile URL")}</Label>
                 <Input value={xProfileUrl} onChange={(event) => setXProfileUrl(event.target.value)} placeholder="https://x.com/yourname" className="border-white/[0.08] bg-[#0d0d10]/80 text-white placeholder:text-white/35" />
               </div>
               <div className="flex flex-col gap-2 sm:flex-row md:justify-end">
                 <Button variant="outline" className="tech-secondary" onClick={clearXProfileConfig}>
-                  <Trash2 className="h-4 w-4" /> 清空
+                  <Trash2 className="h-4 w-4" /> {t("clear")}
                 </Button>
                 <Button className="tech-cta" onClick={saveXProfileConfig}>
-                  <Save className="h-4 w-4" /> 保存主页
+                  <Save className="h-4 w-4" /> {tr("保存主页", "Save profile")}
                 </Button>
               </div>
             </div>
-            <p className="text-xs leading-5 text-white/45">这里只保存公开主页链接，不读取私信或后台数据。AI 生成结果只是定位初稿，你可以回到工作台继续修改。</p>
+            <p className="text-xs leading-5 text-white/45">{tr("这里只保存公开主页链接，不读取私信或后台数据。AI 生成结果只是定位初稿，你可以回到工作台继续修改。", "Only the public profile URL is stored here. The app does not read DMs or private analytics. AI output is an editable starting draft.")}</p>
           </CardContent>
         </Card>
 
         <div className="fade-up delay-4 grid gap-3 rounded-lg border border-blue-400/10 bg-blue-400/5 p-4 text-sm leading-6 text-blue-100/75 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div>
             <div className="mb-2 flex items-center gap-2 font-semibold text-blue-100">
-              <ShieldCheck className="h-4 w-4" /> 本地保存说明
+              <ShieldCheck className="h-4 w-4" /> {t("localStorage")}
             </div>
-            密钥和 X 主页地址只保存在当前浏览器 localStorage，不进入工作台 JSON 备份。清空测试数据不会删除 Grok / GPT-5.5 密钥和 X 主页地址。{message ? <span className="ml-2 text-emerald-200"><CheckCircle2 className="mr-1 inline h-4 w-4" />{message}</span> : null}
+            {tr("密钥和 X 主页地址只保存在当前浏览器 localStorage，不进入工作台 JSON 备份。清空测试数据不会删除 Grok / GPT-5.5 密钥和 X 主页地址。", "API keys and the X profile URL stay in this browser's localStorage and are excluded from workbench JSON backups. Clearing workbench data does not delete these settings.")}{message ? <span className="ml-2 text-emerald-200"><CheckCircle2 className="mr-1 inline h-4 w-4" />{message}</span> : null}
           </div>
           <Button variant="outline" className="tech-secondary w-full md:w-auto" onClick={clearWorkbenchData}>
-            <Trash2 className="h-4 w-4" /> 清空测试数据
+            <Trash2 className="h-4 w-4" /> {tr("清空测试数据", "Clear local workbench data")}
           </Button>
         </div>
       </div>

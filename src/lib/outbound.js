@@ -306,7 +306,7 @@
     const productName = cleanText(product.name) || "这个工具";
     const rawPain = cleanText(lead.note) || "你正在找更有效的获客方式";
     const pain = shorten(rawPain, 46);
-    const draft = `${name}，看到你提到「${pain}」。我在做 ${productName}，可以帮你先把目标客户关键词、线索评分和第一版触达话术跑出来。要不要我用你的产品免费试跑 10 条线索？`;
+    const draft = `${name}，看到你提到「${pain}」。这类问题通常先从具体用户场景和可验证的需求信号开始梳理。我在做 ${productName}，也在研究这类工作流；你现在最想先验证哪一步？`;
 
     return draft.length <= 220 ? draft : `${draft.slice(0, 217)}...`;
   }

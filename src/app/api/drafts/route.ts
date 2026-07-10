@@ -12,6 +12,7 @@ type DraftMode = "outbound" | "growth";
 
 type DraftRequest = {
   mode?: DraftMode;
+  locale?: "zh-CN" | "en";
   profile?: unknown;
   styleGuide?: unknown;
   styleSamples?: unknown[];
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
           model,
           payload: {
             mode,
+            locale: body.locale,
             profile: body.profile,
             styleGuide: body.styleGuide,
             styleSamples: body.styleSamples,

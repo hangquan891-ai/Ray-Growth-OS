@@ -17,6 +17,10 @@
     return String(value ?? "").trim();
   }
 
+  function normalizeLocale(locale) {
+    return locale === "en" ? "en" : "zh-CN";
+  }
+
   function clampInteger(value, fallback, min, max) {
     const number = Number(value);
     if (!Number.isFinite(number)) return fallback;
@@ -72,8 +76,9 @@
     };
   }
 
-  function buildStructuredGrokSignalPrompt(prompt) {
+  function buildStructuredGrokSignalPrompt(prompt, locale) {
     const basePrompt = clean(prompt);
+    const outputLanguage = normalizeLocale(locale) === "en" ? "English" : "Simplified Chinese";
     return `${basePrompt}
 
 Return only valid JSON. Do not use Markdown, code fences, tables, or extra commentary.
@@ -108,6 +113,7 @@ Rules:
 - Never fabricate URLs. Use an empty string when the exact URL is unavailable.
 - confidence must be an integer from 0 to 100.
 - text and reason should be short enough to review quickly.
+- Write all narrative fields in ${outputLanguage}.
 - If no useful signals are found, return {"signals":[]} or {"accountRadar": {...}, "signals":[]}.
 `;
   }
@@ -144,10 +150,27 @@ Rules:
     }
   }
 
-  function buildXProfilePullPrompt({ profileUrl, contextPrompt, profileSnapshot = "" }) {
+  function buildXProfilePullPrompt({ profileUrl, contextPrompt, profileSnapshot = "", locale }) {
     const normalizedUrl = normalizeXProfileUrl(profileUrl);
     const basePrompt = clean(contextPrompt);
     const pulledData = clean(profileSnapshot);
+
+    if (normalizeLocale(locale) === "en") {
+      return `${basePrompt}
+
+Competitor-insight task: compare one public X account with the operator's positioning, then find external people and discussions worth engaging.
+Target account: ${normalizedUrl}
+${pulledData ? `\nPublic X data already retrieved for this insight:\n${pulledData}\n` : ""}
+Treat the account as a discovery entry point, not merely a profile to summarize:
+1. Classify it as a competitor, KOL, community, target user, or unknown account.
+2. Compare its positioning with the operator's positioning above: audience overlap, uncovered pain points, and defensible conversation angles.
+3. Fill accountRadar with the classification, both positions, audience overlap, opportunity gap, recommended angles, next action, keywords, and uncertainties.
+4. Find public discussions, commenters, or audience topics with a concrete pain point, alternative-search need, purchase intent, or high interaction value.
+5. Every signal must be importable: identify the person, public context, reason to engage, and a useful angle.
+6. Do not use DMs, private data, fabricated URLs, fabricated accounts, or fabricated interactions.
+7. Exclude posts and profiles belonging to the operator or target account. Return external users, competitor audiences, commenters, and related discussions only.
+8. Return fewer candidates instead of padding low-quality results.`;
+    }
 
     return `${basePrompt}
 

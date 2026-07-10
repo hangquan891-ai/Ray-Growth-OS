@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 
 import { ActionToastHost, showToast } from "@/components/action-toast";
+import { LanguageToggle, useI18n } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -179,8 +180,12 @@ function partitionOwnSignals<T extends Partial<Signal> & Partial<QueueItem>>(ite
   return { included, excludedOwn };
 }
 
-function ownAccountExclusionText(identity: OwnAccountIdentity) {
+function ownAccountExclusionText(identity: OwnAccountIdentity, locale: "zh-CN" | "en" = "zh-CN") {
   const markers = [...identity.handles.map((handle) => "@" + handle), ...identity.names].filter(Boolean);
+  if (locale === "en") {
+    const label = markers.length ? ` (${markers.join(" / ")})` : "";
+    return "\n\nHard exclusion: do not return the operator's own account" + label + ", product account, posts, or replies. Return external target users, third-party discussions, competitor audiences, or potential customers only.";
+  }
   const label = markers.length ? "（" + markers.join(" / ") + "）" : "";
   return "\n\n硬性排除规则：不要返回我自己的账号" + label + "、我方产品账号、我自己发的帖子或回复。只返回外部目标用户、第三方讨论、竞品受众或潜在客户。";
 }
@@ -687,25 +692,25 @@ const modeCopy: Record<Mode, ModeContent> = {
 };
 const initialState: Record<Mode, FormState> = {
   outbound: {
-    productName: "LaunchRadar",
-    description: "用 Grok 在 X 上找到高意向线索，并生成个性化触达草稿。",
-    targetCustomer: "刚上线 SaaS 但没有流量的独立开发者",
-    competitors: "Apollo, Clay, Taplio",
-    painPoints: "0 流量, 找不到付费用户, SEO 太慢, 第一批客户",
-    replyGoal: "先建立可信互动，确认对方是否愿意让 LaunchRadar 帮他试跑一批 X 线索。",
-    productContext: "我在做 LaunchRadar，一个用 Grok 在 X 上找到高意向线索并生成个性化触达草稿的工具。公开回复里轻描淡写带到，不要硬卖。",
+    productName: "示例 SaaS",
+    description: "帮助独立开发者从公开讨论中发现高意向需求，并准备相关的首次触达草稿。",
+    targetCustomer: "刚上线 SaaS、正在验证获客渠道的独立开发者",
+    competitors: "现有工作流、替代方案或手动研究",
+    painPoints: "没有流量, 找不到付费用户, SEO 太慢, 第一批客户",
+    replyGoal: "先围绕对方的具体问题提供有用信息，再确认是否适合继续交流。",
+    productContext: "只在与当前问题直接相关时说明正在构建的产品或经验；不要承诺未提供的服务、结果或免费试用。",
     leadInput: `X | 独立开发者 |  | 刚上线一个 SaaS 但没有流量，想找到付费用户，SEO 太慢
 X | SaaS 创始人 |  | 正在寻找第一批付费用户，想验证主动获客渠道
 X | AI 产品开发者 |  | 用 AI Coding 做了产品，但不知道怎么找到真实需求`,
   },
   growth: {
-    productName: "Ray｜AI Coding 出海日记",
-    description: "Java 后端开发者，分享 AI Coding、独立开发、主动获客和出海产品经验。",
-    targetCustomer: "独立开发者, AI Coding 用户, 正在做出海产品的程序员",
-    competitors: "提升互动质量, 增加关注者, 沉淀内容选题",
-    painPoints: "AI Coding, 独立开发, 主动获客, 出海 SaaS",
-    replyGoal: "先贡献一个可执行观点，让对方知道我长期记录 AI Coding 出海和主动获客，再引导关注或继续交流。",
-    productContext: "我是 Ray，Java 后端开发者，正在分享 AI Coding、独立开发、主动获客和出海产品经验。回复里可以自然露出身份，但不要像广告。",
+    productName: "Growth OS 示例账号",
+    description: "分享 AI 工具、独立开发和产品增长的可验证实践。",
+    targetCustomer: "独立开发者, AI 工具用户, 正在验证产品市场的开发者",
+    competitors: "提升互动质量, 获得相关关注, 沉淀内容选题",
+    painPoints: "AI 工具, 独立开发, 用户研究, 产品增长",
+    replyGoal: "先贡献一个具体、可执行的观点；只在相关时引导对方继续讨论或关注。",
+    productContext: "只在有助于理解回复时说明身份、产品或经验；不使用广告式表达，也不作无法验证的承诺。",
     leadInput: `X | AI 独立开发者 |  | 用 AI Coding 做完产品但上线后 0 流量，想知道怎么找到第一批用户
 X | Cursor 用户 |  | 用 Cursor 做了一个小工具，但不知道怎么验证需求
 X | SaaS 开发者 |  | 产品上线后没有流量，想知道怎么获得第一批用户`,
@@ -994,10 +999,22 @@ const insightDashboardTabs: Array<{ value: DashboardTab; label: string; shortLab
 ];
 const dashboardTabs = [...workflowDashboardTabs, ...insightDashboardTabs];
 
-function dashboardTabLabel(tab: DashboardTab) {
-  return dashboardTabs.find((item) => item.value === tab)?.label ?? "总览";
+function localizedDashboardTabs(locale: "zh-CN" | "en") {
+  if (locale !== "en") return dashboardTabs;
+  const labels: Record<DashboardTab, { label: string; shortLabel: string }> = {
+    overview: { label: "Overview", shortLabel: "Home" },
+    search: { label: "Find people", shortLabel: "Find" },
+    engage: { label: "Engagement queue", shortLabel: "Queue" },
+    account: { label: "Competitor insights", shortLabel: "Insights" },
+  };
+  return dashboardTabs.map((tab) => ({ ...tab, ...labels[tab.value] }));
+}
+
+function dashboardTabLabel(tab: DashboardTab, locale: "zh-CN" | "en" = "zh-CN") {
+  return localizedDashboardTabs(locale).find((item) => item.value === tab)?.label ?? (locale === "en" ? "Overview" : "总览");
 }
 export default function Home() {
+  const { locale } = useI18n();
   const mode: Mode = "growth";
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [forms, setForms] = useState<Record<Mode, FormState>>(initialState);
@@ -1222,6 +1239,7 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         mode,
+        locale,
         xProfileUrl: xProfileConfig.profileUrl,
         current: {
           productName: current.productName,
@@ -1476,6 +1494,7 @@ export default function Home() {
   async function runAiScoring(targetItems: QueueItem[] = scoreSourceItems): Promise<AiScoreRunResult> {
     const payload = buildScoreRequestInput({
       mode,
+      locale,
       profile: {
         productName: current.productName,
         description: current.description,
@@ -1531,6 +1550,7 @@ export default function Home() {
   async function runAiDrafting(targetItems: QueueItem[] = draftSourceItems): Promise<AiDraftRunResult> {
     const payload = buildDraftRequestInput({
       mode,
+      locale,
       profile: {
         productName: current.productName,
         description: current.description,
@@ -1692,6 +1712,7 @@ export default function Home() {
   async function runGrowthMemoryLearning(): Promise<GrowthMemoryRunResult> {
     const payload = buildGrowthMemoryRequestInput({
       mode,
+      locale,
       profile: {
         productName: current.productName,
         description: current.description,
@@ -1907,6 +1928,10 @@ export default function Home() {
 }
 
 function DashboardSidebar({ activeTab, setActiveTab }: { activeTab: DashboardTab; setActiveTab: Dispatch<SetStateAction<DashboardTab>> }) {
+  const { locale, t } = useI18n();
+  const tabs = localizedDashboardTabs(locale);
+  const workflowTabs = tabs.filter((tab) => tab.value !== "account");
+  const insightTabs = tabs.filter((tab) => tab.value === "account");
   return (
     <aside className="group/sidebar relative z-20 hidden h-screen w-16 shrink-0 overflow-hidden border-r border-white/[0.08] bg-[#08090d]/95 pl-3 pr-2 pb-20 backdrop-blur-xl transition-[width] duration-300 ease-out hover:w-44 md:flex md:flex-col md:items-start md:gap-2 md:pt-4">
       <div className="grid h-10 w-10 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.045] text-white transition-transform duration-200 hover:scale-105 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125">
@@ -1914,26 +1939,26 @@ function DashboardSidebar({ activeTab, setActiveTab }: { activeTab: DashboardTab
       </div>
       <nav className="mt-4 grid gap-2">
         <div className="grid gap-2">
-          {workflowDashboardTabs.map((tab) => (
+          {workflowTabs.map((tab) => (
             <SidebarTabButton key={tab.value} tab={tab} activeTab={activeTab} setActiveTab={setActiveTab} />
           ))}
         </div>
         <div className="my-1 h-px w-10 bg-white/[0.08] transition-[width] duration-300 group-hover/sidebar:w-36" />
-        <p className="hidden px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/25 opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">洞察工具</p>
+        <p className="hidden px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/25 opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">{t("insightTools")}</p>
         <div className="grid gap-2">
-          {insightDashboardTabs.map((tab) => (
+          {insightTabs.map((tab) => (
             <SidebarTabButton key={tab.value} tab={tab} activeTab={activeTab} setActiveTab={setActiveTab} />
           ))}
         </div>
       </nav>
       <Link
         href="/settings"
-        aria-label="设置"
-        title="设置"
+        aria-label={t("settings")}
+        title={t("settings")}
         className="mt-auto mb-4 flex h-11 w-10 items-center justify-center gap-3 overflow-hidden rounded-lg border border-blue-300/25 bg-blue-400/12 px-0 text-blue-100 shadow-lg shadow-blue-500/10 transition-all duration-200 hover:scale-105 hover:border-blue-200/45 hover:bg-blue-400/20 hover:text-white active:scale-95 group-hover/sidebar:w-36 group-hover/sidebar:justify-start group-hover/sidebar:px-3 [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125 active:[&_svg]:scale-110"
       >
         <Settings className="h-5 w-5" />
-        <span className="hidden min-w-0 truncate text-sm font-bold opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">设置</span>
+        <span className="hidden min-w-0 truncate text-sm font-bold opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">{t("settings")}</span>
       </Link>
     </aside>
   );
@@ -1967,9 +1992,11 @@ function SidebarTabButton({
 }
 
 function MobileDashboardNav({ activeTab, setActiveTab }: { activeTab: DashboardTab; setActiveTab: Dispatch<SetStateAction<DashboardTab>> }) {
+  const { locale } = useI18n();
+  const tabs = localizedDashboardTabs(locale);
   return (
     <nav className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-4 rounded-lg border border-white/[0.08] bg-[#08090d]/90 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl md:hidden">
-      {dashboardTabs.map((tab) => (
+      {tabs.map((tab) => (
         <button
           key={tab.value}
           type="button"
@@ -1994,6 +2021,7 @@ function DashboardTopbar({
   urgentCount: number;
   downloadCsv: () => void;
 }) {
+  const { locale, t } = useI18n();
   return (
     <header className="relative z-20 flex h-auto shrink-0 flex-col gap-3 border-b border-white/[0.07] bg-[#08090d]/90 px-4 py-3 backdrop-blur-xl md:h-16 md:flex-row md:items-center md:justify-between md:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-3">
@@ -2003,21 +2031,22 @@ function DashboardTopbar({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-black text-white">Ray Growth OS</p>
-            <Badge variant="outline" className="rounded-md border-white/[0.08] bg-white/[0.04] text-white/50">本地 MVP</Badge>
+            <Badge variant="outline" className="rounded-md border-white/[0.08] bg-white/[0.04] text-white/50">{t("localMvp")}</Badge>
           </div>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-white/40">{dashboardTabLabel(activeTab)}</p>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-white/40">{dashboardTabLabel(activeTab, locale)}</p>
         </div>
       </div>
 
       <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
         <Badge variant="outline" className="h-9 rounded-lg border-blue-300/15 bg-blue-400/10 px-3 text-blue-100">
-          <Radar className="mr-1.5 h-3.5 w-3.5" /> 增长机会
+          <Radar className="mr-1.5 h-3.5 w-3.5" /> {t("growthOpportunities")}
         </Badge>
+        <LanguageToggle />
         <Button variant="outline" size="sm" onClick={downloadCsv} className="tech-secondary h-9">
-          <Download className="h-4 w-4" /> CSV
+          <Download className="h-4 w-4" /> {t("csv")}
         </Button>
         <Badge variant="outline" className="h-9 rounded-lg border-amber-300/15 bg-amber-400/10 px-3 text-amber-100">
-          {urgentCount} 个紧急动作
+          {urgentCount} {t("urgentActions")}
         </Badge>
       </div>
     </header>
@@ -2042,11 +2071,16 @@ function OverviewTab({
   hotCount: number;
   setActiveTab: (tab: DashboardTab) => void;
 }) {
+  const { locale, t } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
+  const overviewCopy = locale === "en"
+    ? { badge: "Growth opportunities", heroDescription: "Find relevant people in public discussions, prioritize interaction and demand signals, then generate replies, quotes, content ideas, and respectful follow-ups." }
+    : copy;
   const queueCount = result.mode === "outbound" ? result.leads.length : result.opportunities.length;
   const overviewStages: Array<{ label: string; value: number; detail: string; help: string; targetTab: DashboardTab }> = [
-    { label: "定位找人", value: result.queries.length, detail: "账号 + Grok", help: "填清楚定位，用 Grok 搜公开讨论并导入互动队列。", targetTab: "search" },
-    { label: "竞品洞察", value: queueCount, detail: "可选洞察工具", help: "对比竞品、KOL 或目标账号的定位和受众，从机会空白里挖可互动线索。", targetTab: "account" },
-    { label: "互动队列", value: queueCount, detail: "评分 + 草稿 + 执行", help: "在一个队列里看优先级、运行 AI 评分/草稿、打开来源并标记处理结果。", targetTab: "engage" },
+    { label: tr("定位找人", "Find people"), value: result.queries.length, detail: tr("账号 + Grok", "Positioning + Grok"), help: tr("填清楚定位，用 Grok 搜公开讨论并导入互动队列。", "Define positioning, discover public discussions with Grok, and import them into the queue."), targetTab: "search" },
+    { label: tr("竞品洞察", "Competitor insights"), value: queueCount, detail: tr("可选洞察工具", "Optional insight tool"), help: tr("对比竞品、KOL 或目标账号的定位和受众，从机会空白里挖可互动线索。", "Compare a competitor, KOL, or target account to discover engagement opportunities in audience gaps."), targetTab: "account" },
+    { label: tr("互动队列", "Engagement queue"), value: queueCount, detail: tr("评分 + 草稿 + 执行", "Score + draft + execute"), help: tr("在一个队列里看优先级、运行 AI 评分/草稿、打开来源并标记处理结果。", "Review priority in one queue, run AI scoring and drafts, open sources, and record outcomes."), targetTab: "engage" },
   ];
 
   return (
@@ -2055,17 +2089,17 @@ function OverviewTab({
         <div className="relative z-10 grid min-h-[560px] gap-7 p-5 lg:p-7">
           <div className="grid gap-6">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">{copy.badge}</Badge>
+              <Badge className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">{overviewCopy.badge}</Badge>
               <Badge variant="outline" className="rounded-md border-blue-300/15 bg-blue-400/10 text-blue-100">
-                <Sparkles className="mr-1 h-3.5 w-3.5" /> AI 工作流
+                <Sparkles className="mr-1 h-3.5 w-3.5" /> {t("aiWorkflow")}
               </Badge>
             </div>
 
             <div className="max-w-4xl space-y-4">
               <h2 className="text-4xl font-black leading-[1.04] text-white sm:text-5xl lg:text-[3.5rem]">
-                把 X 上的讨论变成 <span className="gradient-text">粉丝增长。</span>
+                {tr("把 X 上的真实讨论，变成", "Turn real X discussions into")} <span className="gradient-text">{tr("值得行动的增长机会。", "growth opportunities worth acting on.")}</span>
               </h2>
-              <p className="max-w-[640px] text-sm leading-6 text-slate-300 sm:text-base">{copy.heroDescription}</p>
+              <p className="max-w-[640px] text-sm leading-6 text-slate-300 sm:text-base">{overviewCopy.heroDescription}</p>
             </div>
           </div>
 
@@ -2091,12 +2125,14 @@ function OverviewLoopVisual({
   queueCount: number;
   setActiveTab: (tab: DashboardTab) => void;
 }) {
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   const loopSteps: Array<{ label: string; value: number; detail: string; icon: ReactNode; targetTab: DashboardTab }> = [
-    { label: "填定位", value: result.queries.length, detail: "生成 Grok Prompt", icon: <Target className="h-5 w-5" />, targetTab: "search" },
-    { label: "找讨论", value: queueCount, detail: "导入 X 结果", icon: <Radar className="h-5 w-5" />, targetTab: "search" },
-    { label: "竞品洞察", value: queueCount, detail: "可选支线", icon: <Users className="h-5 w-5" />, targetTab: "account" },
-    { label: "AI 排序", value: averageScore, detail: "平均优先级", icon: <Gauge className="h-5 w-5" />, targetTab: "engage" },
-    { label: "去互动", value: hotCount, detail: "高分未执行", icon: <MessageSquareText className="h-5 w-5" />, targetTab: "engage" },
+    { label: tr("填定位", "Position"), value: result.queries.length, detail: tr("生成 Grok Prompt", "Generate Grok prompt"), icon: <Target className="h-5 w-5" />, targetTab: "search" },
+    { label: tr("找讨论", "Discover"), value: queueCount, detail: tr("导入 X 结果", "Import X results"), icon: <Radar className="h-5 w-5" />, targetTab: "search" },
+    { label: tr("竞品洞察", "Insights"), value: queueCount, detail: tr("可选支线", "Optional path"), icon: <Users className="h-5 w-5" />, targetTab: "account" },
+    { label: tr("AI 排序", "AI ranking"), value: averageScore, detail: tr("平均优先级", "Average priority"), icon: <Gauge className="h-5 w-5" />, targetTab: "engage" },
+    { label: tr("去互动", "Engage"), value: hotCount, detail: tr("高分未执行", "High-score, unprocessed"), icon: <MessageSquareText className="h-5 w-5" />, targetTab: "engage" },
   ];
   const queryPreview = result.queries.slice(0, 3);
 
@@ -2105,10 +2141,10 @@ function OverviewLoopVisual({
       <div className="relative overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.018] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-white/40">增长闭环</p>
-            <p className="mt-1 text-sm font-semibold text-white">从找人到回复，不再分散在几个页面里。</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-white/40">{tr("增长闭环", "Growth loop")}</p>
+            <p className="mt-1 text-sm font-semibold text-white">{tr("从找人到回复，不再分散在几个页面里。", "From discovery to reply, in one workflow.")}</p>
           </div>
-          <Badge variant="outline" className="rounded-md border-emerald-500/10 bg-emerald-500/10 text-emerald-200">今日工作台</Badge>
+          <Badge variant="outline" className="rounded-md border-emerald-500/10 bg-emerald-500/10 text-emerald-200">{tr("今日工作台", "Today")}</Badge>
         </div>
 
         <div className="relative mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -2133,10 +2169,10 @@ function OverviewLoopVisual({
       <div className="rounded-lg border border-white/[0.06] bg-white/[0.018] p-4">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-white/40">Grok 会搜什么</p>
-            <p className="mt-1 text-sm font-semibold text-white">根据定位自动生成</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-white/40">{tr("Grok 会搜什么", "What Grok will search")}</p>
+            <p className="mt-1 text-sm font-semibold text-white">{tr("根据定位自动生成", "Generated from positioning")}</p>
           </div>
-          <Button type="button" size="sm" variant="ghost" className="text-blue-100 hover:bg-blue-400/10 hover:text-white" onClick={() => setActiveTab("search")}>去调整</Button>
+          <Button type="button" size="sm" variant="ghost" className="text-blue-100 hover:bg-blue-400/10 hover:text-white" onClick={() => setActiveTab("search")}>{tr("去调整", "Edit")}</Button>
         </div>
         <div className="mt-3 grid gap-2">
           {queryPreview.map((query, index) => (
@@ -2181,11 +2217,13 @@ function SearchRadarTab({
   restoreBackupText: (rawText: string) => { ok: boolean; message: string };
   growthMemory: GrowthMemoryState;
 }) {
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   const flowSteps = [
-    { label: "1 填写定位", detail: "产品/账号、目标用户、痛点" },
-    { label: "2 去 Grok 找人", detail: "复制 Prompt 或中转查询" },
-    { label: "3 导入结果", detail: "粘贴 X 结果并去重" },
-    { label: "4 互动队列", detail: "评分、草稿和执行记录" },
+    { label: tr("1 填写定位", "1 Define positioning"), detail: tr("产品/账号、目标用户、痛点", "Account or product, audience, pain points") },
+    { label: tr("2 去 Grok 找人", "2 Discover on Grok"), detail: tr("复制 Prompt 或中转查询", "Copy the prompt or run proxy search") },
+    { label: tr("3 导入结果", "3 Import results"), detail: tr("粘贴 X 结果并去重", "Paste X results and deduplicate") },
+    { label: tr("4 互动队列", "4 Engagement queue"), detail: tr("评分、草稿和执行记录", "Score, draft, and log outcomes") },
   ];
 
   return (
@@ -2195,9 +2233,9 @@ function SearchRadarTab({
         <div className="grid content-start gap-4">
           <Card className="overflow-hidden border border-white/[0.08] bg-white/[0.03] text-white shadow-2xl shadow-blue-500/5 backdrop-blur-md">
             <CardHeader className="border-b border-white/[0.08] bg-[#0d0d10]/70">
-              <Badge variant="outline" className="w-fit rounded-md border-blue-500/10 bg-blue-500/10 text-blue-200"><Radar className="mr-1 h-3.5 w-3.5" /> 定位找人流程</Badge>
-              <CardTitle className="mt-3 text-xl text-white">先填定位，再用 Grok 找真实 X 用户</CardTitle>
-              <CardDescription className="mt-2 text-white/55">定位会自动生成 Grok Prompt；找到结果后直接进入互动队列。</CardDescription>
+              <Badge variant="outline" className="w-fit rounded-md border-blue-500/10 bg-blue-500/10 text-blue-200"><Radar className="mr-1 h-3.5 w-3.5" /> {tr("定位找人流程", "Discovery flow")}</Badge>
+              <CardTitle className="mt-3 text-xl text-white">{tr("先填定位，再用 Grok 找真实 X 用户", "Define positioning, then discover real X users with Grok")}</CardTitle>
+              <CardDescription className="mt-2 text-white/55">{tr("定位会自动生成 Grok Prompt；找到结果后直接进入互动队列。", "Positioning generates the Grok prompt. Imported results go directly into the engagement queue.")}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 p-4 md:grid-cols-4">
               {flowSteps.map((step) => (
@@ -3294,23 +3332,39 @@ function InputPanel({
   onGenerateProfile?: () => Promise<AiProfileRunResult>;
   onSaveProfile?: () => void;
 }) {
+  const { locale, t } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
+  const formCopy = locale === "en"
+    ? {
+        badge: "Growth opportunities",
+        description: "Describe who you are, who you want to reach, and the problems you can help with. The workbench will turn it into public-discussion queries, ranking, and drafts.",
+        primaryLabel: "Account / product name",
+        secondaryLabel: "Growth goal",
+        descriptionLabel: "Positioning",
+        targetLabel: "Target audience",
+        pillarLabel: "Topics / pain points",
+        candidateLabel: "Imported X signals",
+      }
+    : copy;
   const [profileState, setProfileState] = useState<"idle" | "loading" | "error">("idle");
-  const [profileMessage, setProfileMessage] = useState("AI 生成后可以先调整字段，再点保存当前定位。");
+  const [profileMessage, setProfileMessage] = useState("");
 
   async function generateProfile() {
     if (!onGenerateProfile) return;
     setProfileState("loading");
-    setProfileMessage("正在根据 X 主页和当前内容生成定位草稿...");
+    setProfileMessage(tr("正在根据 X 主页和当前内容生成定位草稿...", "Generating a positioning draft from the public X profile and current inputs…"));
 
     try {
       const result = await onGenerateProfile();
       setProfileState("idle");
-      const successMessage = `已用 ${result.model} 生成定位草稿，并回填到下面字段。${result.profile.reasoning ? `依据：${result.profile.reasoning}` : ""}`;
+      const successMessage = locale === "en"
+        ? `A positioning draft from ${result.model} was added to the fields below.${result.profile.reasoning ? ` Basis: ${result.profile.reasoning}` : ""}`
+        : `已用 ${result.model} 生成定位草稿，并回填到下面字段。${result.profile.reasoning ? `依据：${result.profile.reasoning}` : ""}`;
       setProfileMessage(successMessage);
-      showToast("AI 已生成定位草稿。", "success");
+      showToast(tr("AI 已生成定位草稿。", "AI positioning draft generated."), "success");
     } catch (error) {
       setProfileState("error");
-      const errorMessage = error instanceof Error ? error.message : "AI 定位生成失败，请稍后再试。";
+      const errorMessage = error instanceof Error ? error.message : tr("AI 定位生成失败，请稍后再试。", "AI positioning generation failed. Please try again." );
       setProfileMessage(errorMessage);
       showToast(errorMessage, "error");
     }
@@ -3321,9 +3375,9 @@ function InputPanel({
       <CardHeader className="border-b border-slate-200 bg-white">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <Badge variant="secondary" className="rounded-md bg-slate-100 text-slate-700">{copy.badge}</Badge>
-            <CardTitle className="mt-3 text-xl">{mode === "outbound" ? "第 1 步：填写产品定位" : "第 1 步：填写账号定位"}</CardTitle>
-            <CardDescription className="mt-2 leading-6">{copy.description}</CardDescription>
+            <Badge variant="secondary" className="rounded-md bg-slate-100 text-slate-700">{formCopy.badge}</Badge>
+            <CardTitle className="mt-3 text-xl">{mode === "outbound" ? tr("第 1 步：填写产品定位", "Step 1: Define product positioning") : tr("第 1 步：填写账号定位", "Step 1: Define positioning")}</CardTitle>
+            <CardDescription className="mt-2 leading-6">{formCopy.description}</CardDescription>
           </div>
           <div className="grid h-10 w-10 place-items-center rounded-md bg-emerald-50 text-emerald-700">
             {mode === "outbound" ? <Target className="h-5 w-5" /> : <Users className="h-5 w-5" />}
@@ -3336,16 +3390,16 @@ function InputPanel({
           <div className="rounded-lg border border-blue-200/70 bg-blue-50 p-3 text-slate-700 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="text-sm font-black text-slate-950">不知道怎么填？</p>
-                <p className="mt-1 text-xs leading-5 text-slate-600">先在 <Link href="/settings" className="font-bold text-blue-700 underline-offset-2 hover:underline">设置</Link> 里保存 X 主页地址，再让 AI 帮你生成一版初稿。</p>
+                <p className="text-sm font-black text-slate-950">{tr("不知道怎么填？", "Need a starting point?")}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">{locale === "en" ? <>Save a public X profile URL in <Link href="/settings" className="font-bold text-blue-700 underline-offset-2 hover:underline">Settings</Link>, then let AI generate an editable first draft.</> : <>先在 <Link href="/settings" className="font-bold text-blue-700 underline-offset-2 hover:underline">设置</Link> 里保存 X 主页地址，再让 AI 帮你生成一版初稿。</>}</p>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button type="button" className="bg-[#3B82F6] text-white hover:bg-blue-500" onClick={() => void generateProfile()} disabled={profileState === "loading"}>
-                  {profileState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} AI 帮我生成
+                  {profileState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {tr("AI 帮我生成", "Generate with AI")}
                 </Button>
                 {onSaveProfile ? (
                   <Button type="button" variant="outline" className="border-blue-200 bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800" onClick={onSaveProfile}>
-                    保存当前定位
+                    {tr("保存当前定位", "Save positioning")}
                   </Button>
                 ) : null}
               </div>
@@ -3354,41 +3408,41 @@ function InputPanel({
           </div>
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-          <Field label={copy.primaryLabel}>
+          <Field label={formCopy.primaryLabel}>
             <Input value={current.productName} onChange={(event) => updateField("productName", event.target.value)} />
           </Field>
-          <Field label={copy.secondaryLabel}>
+          <Field label={formCopy.secondaryLabel}>
             <Input value={current.competitors} onChange={(event) => updateField("competitors", event.target.value)} />
           </Field>
         </div>
-        <Field label={copy.descriptionLabel}>
+        <Field label={formCopy.descriptionLabel}>
           <Textarea rows={4} value={current.description} onChange={(event) => updateField("description", event.target.value)} />
         </Field>
-        <Field label={copy.targetLabel}>
+        <Field label={formCopy.targetLabel}>
           <Textarea rows={3} value={current.targetCustomer} onChange={(event) => updateField("targetCustomer", event.target.value)} />
         </Field>
-        <Field label={copy.pillarLabel}>
+        <Field label={formCopy.pillarLabel}>
           <Textarea rows={3} value={current.painPoints} onChange={(event) => updateField("painPoints", event.target.value)} />
         </Field>
         <div className="rounded-lg border border-blue-200/70 bg-blue-50 p-3 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-black uppercase tracking-wide text-slate-950">回复策略</p>
-              <p className="mt-1 text-xs leading-5 text-slate-600">这会进入 GPT-5.5 草稿 Prompt，用来决定是否露出产品/身份，以及这次互动想达成什么。</p>
+              <p className="text-xs font-black uppercase tracking-wide text-slate-950">{tr("回复策略", "Engagement policy")}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">{tr("这会进入 GPT-5.5 草稿 Prompt，用来决定是否露出产品/身份，以及这次互动想达成什么。", "This is sent to the AI draft prompt to define the goal and when identity or product context is relevant.")}</p>
             </div>
             <Bot className="h-4 w-4 shrink-0 text-blue-600" />
           </div>
           <div className="mt-3 grid gap-3">
-            <Field label="互动目的 / 下一步">
-              <Textarea rows={2} value={current.replyGoal} onChange={(event) => updateField("replyGoal", event.target.value)} placeholder="例如：先贡献观点，再引导对方关注、私聊或试用。" />
+            <Field label={tr("互动目的 / 下一步", "Engagement goal / next step")}>
+              <Textarea rows={2} value={current.replyGoal} onChange={(event) => updateField("replyGoal", event.target.value)} placeholder={tr("例如：先贡献观点，再引导对方关注、私聊或试用。", "Example: offer one actionable idea, then invite a relevant follow-up.")} />
             </Field>
-            <Field label="产品/身份露出方式">
-              <Textarea rows={3} value={current.productContext} onChange={(event) => updateField("productContext", event.target.value)} placeholder="例如：我是 Ray，正在做/分享什么；什么时候可以自然提到，什么时候不要硬卖。" />
+            <Field label={tr("产品/身份露出方式", "Product / identity context")}>
+              <Textarea rows={3} value={current.productContext} onChange={(event) => updateField("productContext", event.target.value)} placeholder={tr("例如：我在做/分享什么；什么时候可以提到，什么不能承诺。", "Example: what you build or share, when it is relevant to mention, and what you cannot promise.")} />
             </Field>
           </div>
         </div>
-        <Field label={copy.candidateLabel}>
-          <p className="text-xs leading-5 text-slate-500">这里是 Grok/X 结果导入后的线索池；第一次使用时先填上面的定位，再去 Grok 找人。</p>
+        <Field label={formCopy.candidateLabel}>
+          <p className="text-xs leading-5 text-slate-500">{tr("这里是 Grok/X 结果导入后的线索池；第一次使用时先填上面的定位，再去 Grok 找人。", "This is the imported signal pool. Start by defining positioning above, then use Grok to find public discussions.")}</p>
           <Textarea rows={9} value={current.leadInput} onChange={(event) => updateField("leadInput", event.target.value)} className="font-mono text-xs leading-5" />
         </Field>
       </CardContent>
@@ -3677,6 +3731,8 @@ function GrokBridgePanel({
   setModeSignals: (signals: Signal[]) => void;
   growthMemory: GrowthMemoryState;
 }) {
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   const { keywords, grokResult, accountResult, xProfileUrl } = grokBridge;
   const isAccountRadar = variant === "account";
   const activeResult = isAccountRadar ? accountResult : grokResult;
@@ -3692,7 +3748,7 @@ function GrokBridgePanel({
   const manualKeywords = editableKeywords.trim();
   const memoryKeywords = growthMemoryKeywordText(growthMemory);
   const effectiveKeywords = [manualKeywords || autoKeywords, memoryKeywords].filter(Boolean).join(", ");
-  const memoryPromptContext = buildGrowthMemoryPromptContext(growthMemory);
+  const memoryPromptContext = buildGrowthMemoryPromptContext(growthMemory, locale);
   const ownAccountIdentity = useMemo(() => buildOwnAccountIdentity(current, loadXProfileConfig().profileUrl), [current]);
 
   function updateGrokBridgeField(field: keyof GrokBridgeState, value: string) {
@@ -3740,6 +3796,7 @@ function GrokBridgePanel({
   const prompt = useMemo(() => {
     const basePrompt = buildGrokSearchPrompt({
       mode,
+      locale,
       name: current.productName,
       description: current.description,
       targetCustomer: current.targetCustomer,
@@ -3748,9 +3805,10 @@ function GrokBridgePanel({
       keywords: effectiveKeywords,
     });
 
-    const promptWithOwnFilter = basePrompt + ownAccountExclusionText(ownAccountIdentity);
-    return memoryPromptContext ? promptWithOwnFilter + "\n\n上一轮增长记忆（用于筛选候选结果）：\n" + memoryPromptContext : promptWithOwnFilter;
-  }, [current, effectiveKeywords, memoryPromptContext, mode, ownAccountIdentity]);
+    const promptWithOwnFilter = basePrompt + ownAccountExclusionText(ownAccountIdentity, locale);
+    const memoryTitle = locale === "en" ? "Previous growth learning (use only as a prioritization hint):" : "上一轮增长记忆（仅用作优先级参考）：";
+    return memoryPromptContext ? promptWithOwnFilter + "\n\n" + memoryTitle + "\n" + memoryPromptContext : promptWithOwnFilter;
+  }, [current, effectiveKeywords, locale, memoryPromptContext, mode, ownAccountIdentity]);
 
   const existingSignals = useMemo(() => {
     const manualSignals = parseSignalsFromText(current.leadInput, { source: "manual" }) as Signal[];
@@ -3829,6 +3887,7 @@ function GrokBridgePanel({
           action: "profile-pull",
           apiKey,
           model: latestConfig.model,
+          locale,
           prompt,
           profileUrl,
         }),
@@ -3889,6 +3948,7 @@ function GrokBridgePanel({
           action: "proxy-search",
           apiKey,
           model: latestConfig.model,
+          locale,
           prompt,
         }),
       });
@@ -3956,10 +4016,10 @@ function GrokBridgePanel({
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 border-b border-white/[0.08] bg-[#0d0d10]/70">
         <div>
           <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">
-            {isAccountRadar ? <Radar className="mr-1 h-3.5 w-3.5" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />} {isAccountRadar ? "竞品洞察" : "Grok 找讨论"}
+            {isAccountRadar ? <Radar className="mr-1 h-3.5 w-3.5" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />} {isAccountRadar ? tr("竞品洞察", "Competitor insights") : tr("Grok 找讨论", "Discover with Grok")}
           </Badge>
-          <CardTitle className="mt-3 text-xl text-white">{isAccountRadar ? "从竞品/KOL账号挖线索" : "用 Grok 找目标用户"}</CardTitle>
-          <CardDescription className="mt-2 text-white/60">{isAccountRadar ? "单独输入一个公开 X 账号，围绕它的受众和讨论生成可导入的互动线索。" : "按定位生成 Prompt，去 Grok 找公开讨论；找到结果后导入互动队列。"}</CardDescription>
+          <CardTitle className="mt-3 text-xl text-white">{isAccountRadar ? tr("从竞品/KOL账号挖线索", "Discover leads around competitors and KOLs") : tr("用 Grok 找目标用户", "Find target users with Grok")}</CardTitle>
+          <CardDescription className="mt-2 text-white/60">{isAccountRadar ? tr("单独输入一个公开 X 账号，围绕它的受众和讨论生成可导入的互动线索。", "Analyze one public X account to discover importable signals around its audience and discussions.") : tr("按定位生成 Prompt，去 Grok 找公开讨论；找到结果后导入互动队列。", "Generate a prompt from positioning, discover public discussions on Grok, then import the results into the queue.")}</CardDescription>
         </div>
         <div className="grid h-11 w-11 place-items-center rounded-md border border-white/[0.08] bg-white/[0.03] text-white/80">
           <Radar className="h-5 w-5" />
@@ -3971,9 +4031,9 @@ function GrokBridgePanel({
           <section className="grid gap-3 rounded-lg border border-emerald-300/15 bg-emerald-400/[0.045] p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">竞品洞察</Badge>
-                <h3 className="mt-3 text-lg font-bold text-white">看定位差异，再从竞品受众中找机会</h3>
-                <p className="mt-2 text-sm leading-6 text-white/60">输入竞品、行业 KOL、社区账号或目标用户账号，对比定位、受众重叠和机会空白，再生成可互动线索。</p>
+                <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">{tr("竞品洞察", "Competitor insights")}</Badge>
+                <h3 className="mt-3 text-lg font-bold text-white">{tr("看定位差异，再从竞品受众中找机会", "Compare positioning, then discover opportunities in the audience")}</h3>
+                <p className="mt-2 text-sm leading-6 text-white/60">{tr("输入竞品、行业 KOL、社区账号或目标用户账号，对比定位、受众重叠和机会空白，再生成可互动线索。", "Enter a competitor, KOL, community, or target-user account. Compare positioning, audience overlap, and opportunity gaps, then generate signals worth engaging.")}</p>
               </div>
               <Radar className="mt-1 h-5 w-5 shrink-0 text-emerald-100/80" />
             </div>
@@ -3986,10 +4046,10 @@ function GrokBridgePanel({
               />
               <Button className="tech-cta h-10" onClick={() => void pullXProfileViaProxy()} disabled={bridgeState === "loading"}>
                 {bridgeState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                分析账号并生成线索
+                {tr("分析账号并生成线索", "Analyze account and generate signals")}
               </Button>
             </div>
-            <p className="text-xs leading-5 text-white/40">这是主流程之外的可选洞察工具：先看定位和受众差异，再从竞品、KOL 或社区账号周围挖出今天值得互动的人。</p>
+            <p className="text-xs leading-5 text-white/40">{tr("这是主流程之外的可选洞察工具：先看定位和受众差异，再从竞品、KOL 或社区账号周围挖出今天值得互动的人。", "This optional insight tool compares positioning and audience before discovering people around a competitor, KOL, or community account who are worth engaging today.")}</p>
             <AccountRadarOpportunityPanel current={current} profileUrl={xProfileUrl} pulledProfile={proxySearchResult?.pulledProfile ?? null} insight={proxySearchResult?.accountRadar ?? null} />
             {proxySearchResult?.pulledProfile ? (
               <div className="rounded-md border border-emerald-300/15 bg-[#0d0d10]/50 p-3">
@@ -4019,32 +4079,32 @@ function GrokBridgePanel({
           <section className="grid gap-4 rounded-lg border border-white/[0.08] bg-white/[0.02] p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">选择执行方式</Badge>
-                <h3 className="mt-3 text-lg font-bold text-white">手动搜索，或让工作台自动查询</h3>
-                <p className="mt-2 text-sm leading-6 text-white/55">两种方式使用同一份定位和 Prompt，结果最终都会导入互动队列。</p>
+                <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">{tr("选择执行方式", "Choose a workflow")}</Badge>
+                <h3 className="mt-3 text-lg font-bold text-white">{tr("手动搜索，或让工作台自动查询", "Search manually or let the workbench query automatically")}</h3>
+                <p className="mt-2 text-sm leading-6 text-white/55">{tr("两种方式使用同一份定位和 Prompt，结果最终都会导入互动队列。", "Both paths use the same positioning and prompt. Results end up in the same engagement queue.")}</p>
               </div>
-              <span className="text-xs text-white/35">任选一种即可</span>
+              <span className="text-xs text-white/35">{tr("任选一种即可", "Use either path")}</span>
             </div>
 
             <div className="grid gap-3 lg:grid-cols-2">
               <div className="flex min-h-[230px] flex-col rounded-lg border border-blue-300/20 bg-blue-400/[0.055] p-4 shadow-lg shadow-blue-950/10">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">方式 1 · 手动</Badge>
-                    <h4 className="mt-3 font-bold text-white">在 Grok 页面手动搜索</h4>
+                    <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">{tr("方式 1 · 手动", "Path 1 · Manual")}</Badge>
+                    <h4 className="mt-3 font-bold text-white">{tr("在 Grok 页面手动搜索", "Search on the Grok page")}</h4>
                   </div>
                   <Copy className="h-5 w-5 shrink-0 text-blue-100/75" />
                 </div>
-                <p className="mt-2 text-sm leading-6 text-white/55">适合先试流程，或者暂时不配置中转密钥。你需要把 Grok 返回结果复制回工作台。</p>
+                <p className="mt-2 text-sm leading-6 text-white/55">{tr("适合先试流程，或者暂时不配置中转密钥。你需要把 Grok 返回结果复制回工作台。", "Good for trying the workflow or when you do not want to configure a proxy key. Copy Grok's result back into the workbench.")}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-blue-100/65">
-                  <span className="rounded-md bg-white/[0.05] px-2 py-1">1 复制 Prompt</span>
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">{tr("1 复制 Prompt", "1 Copy prompt")}</span>
                   <ArrowRight className="h-3 w-3 text-white/25" />
-                  <span className="rounded-md bg-white/[0.05] px-2 py-1">2 打开 Grok</span>
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">{tr("2 打开 Grok", "2 Open Grok")}</span>
                   <ArrowRight className="h-3 w-3 text-white/25" />
-                  <span className="rounded-md bg-white/[0.05] px-2 py-1">3 粘贴结果</span>
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">{tr("3 粘贴结果", "3 Paste results")}</span>
                 </div>
                 <Button variant="outline" className="tech-secondary mt-auto w-full justify-center" onClick={() => openGrok(true)} disabled={bridgeState === "loading"}>
-                  <Copy className="h-4 w-4" /> 复制 Prompt 并打开 Grok
+                  <Copy className="h-4 w-4" /> {tr("复制 Prompt 并打开 Grok", "Copy prompt and open Grok")}
                 </Button>
               </div>
 
@@ -4052,33 +4112,33 @@ function GrokBridgePanel({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">方式 2 · 自动</Badge>
+                      <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">{tr("方式 2 · 自动", "Path 2 · Automatic")}</Badge>
                       <Badge variant="outline" className={cn("rounded-md", hasProxyKey ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-amber-500/10 bg-amber-500/10 text-amber-300")}>
-                        {isProxyConfigReady ? (hasProxyKey ? "中转已配置" : "需要配置密钥") : "读取配置中"}
+                        {isProxyConfigReady ? (hasProxyKey ? tr("中转已配置", "Proxy configured") : tr("需要配置密钥", "API key required")) : tr("读取配置中", "Loading settings")}
                       </Badge>
                     </div>
-                    <h4 className="mt-3 font-bold text-white">通过中转一键查询</h4>
+                    <h4 className="mt-3 font-bold text-white">{tr("通过中转一键查询", "Run a one-click proxy query")}</h4>
                   </div>
                   <Bot className="h-5 w-5 shrink-0 text-emerald-100/75" />
                 </div>
-                <p className="mt-2 text-sm leading-6 text-white/55">工作台自动提交当前 Prompt，并把返回内容解析成待确认线索；无需打开 Grok 页面来回复制。</p>
+                <p className="mt-2 text-sm leading-6 text-white/55">{tr("工作台自动提交当前 Prompt，并把返回内容解析成待确认线索；无需打开 Grok 页面来回复制。", "The workbench submits the current prompt and parses returned content into reviewable signals. No copy-paste from Grok is needed.")}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/40">
-                  <span className="rounded-md bg-white/[0.05] px-2 py-1">自动查询</span>
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">{tr("自动查询", "Query")}</span>
                   <ArrowRight className="h-3 w-3 text-white/25" />
-                  <span className="rounded-md bg-white/[0.05] px-2 py-1">确认结果</span>
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">{tr("确认结果", "Review")}</span>
                   <ArrowRight className="h-3 w-3 text-white/25" />
-                  <span className="rounded-md bg-white/[0.05] px-2 py-1">导入队列</span>
+                  <span className="rounded-md bg-white/[0.05] px-2 py-1">{tr("导入队列", "Import")}</span>
                   <span className="ml-auto truncate font-mono">{effectiveProxyModel}</span>
                 </div>
                 <div className="mt-auto grid gap-2 sm:grid-cols-2">
                   <Button asChild variant="outline" className="tech-secondary">
                     <Link href="/settings">
-                      <Settings className="h-4 w-4" /> 配置中转
+                      <Settings className="h-4 w-4" /> {tr("配置中转", "Configure proxy")}
                     </Link>
                   </Button>
                   <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled={bridgeState === "loading"}>
                     {bridgeState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                    {bridgeState === "loading" ? "自动查询中" : "一键自动查询"}
+                    {bridgeState === "loading" ? tr("自动查询中", "Querying…") : tr("一键自动查询", "Run automatic query")}
                   </Button>
                 </div>
               </div>
@@ -4754,6 +4814,7 @@ function GrowthMemoryPanel({
   );
 }
 function FeedbackReviewPanel({ mode, signals }: { mode: Mode; signals: Signal[] }) {
+  const { locale } = useI18n();
   const [filter, setFilter] = useState<SignalFeedbackFilter>("all");
   const feedbackSignals = useMemo(
     () =>
@@ -4782,7 +4843,7 @@ function FeedbackReviewPanel({ mode, signals }: { mode: Mode; signals: Signal[] 
   const filteredNoReplyCount = filteredSignals.filter((signal) => normalizeFeedbackStatus(signal.feedback) === "no_reply").length;
 
   function copyLearningPack() {
-    copyText(buildFeedbackLearningPack(filteredSignals, { mode, now: new Date().toISOString() }));
+    copyText(buildFeedbackLearningPack(filteredSignals, { mode, locale, now: new Date().toISOString() }));
   }
 
   function copyReviewSummary() {

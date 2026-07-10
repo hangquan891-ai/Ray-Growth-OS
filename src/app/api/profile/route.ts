@@ -11,6 +11,7 @@ type ProfileMode = "outbound" | "growth";
 
 type ProfileRequest = {
   mode?: ProfileMode;
+  locale?: "zh-CN" | "en";
   xProfileUrl?: string;
   current?: unknown;
   apiKey?: string;
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
           model,
           payload: {
             mode,
+            locale: body.locale,
             xProfileUrl,
             current: body.current,
           },
@@ -133,7 +135,7 @@ export async function POST(request: Request) {
 
   try {
     const parsed = JSON.parse(outputText);
-    const profile = normalizeGeneratedProfile(parsed, mode);
+    const profile = normalizeGeneratedProfile(parsed, mode, body.locale);
     return NextResponse.json({
       ok: true,
       configured: true,

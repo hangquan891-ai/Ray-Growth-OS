@@ -54,6 +54,10 @@
     return mode === "outbound" ? "outbound" : "growth";
   }
 
+  function normalizeLocale(locale) {
+    return locale === "en" ? "en" : "zh-CN";
+  }
+
   function itemScoreKey(item) {
     const url = normalizeUrl(item?.url);
     if (url) return `url:${url}`;
@@ -190,11 +194,12 @@
     };
   }
 
-  function buildScoreRequestInput({ mode: modeInput, profile, items, growthMemory }) {
+  function buildScoreRequestInput({ mode: modeInput, profile, items, growthMemory, locale }) {
     const mode = normalizeMode(modeInput);
 
     return {
       mode,
+      locale: normalizeLocale(locale),
       profile: {
         productName: clean(profile?.productName),
         description: clean(profile?.description),
@@ -205,7 +210,7 @@
       rubric: {
         targetFit: "0-100: target customer or reader fit",
         painIntensity: "0-100: explicit pain, urgency, and need strength",
-        replyValue: "0-100: whether Ray can naturally add value in a reply or outreach",
+        replyValue: "0-100: whether the operator can add specific value in a reply or outreach",
         contentPotential: "0-100: whether the signal can become quote, post, thread, or sales learning material",
         timingRisk: "0-100: freshness, spam risk, conflict risk, and execution timing risk",
       },
@@ -281,7 +286,7 @@
         {
           role: "system",
           content:
-            "You are the semantic scoring engine for Ray Growth OS. Score public conversations for growth or outbound value. If growthMemory is provided, use it as historical feedback for prioritization while preserving itemId exactly. Return only the requested structured output.",
+            "Score public conversations for growth or outbound value. Use only evidence in the supplied payload. Do not invent author intent, facts, metrics, URLs, or context. Treat growthMemory as a reversible prioritization hint, not ground truth. Preserve every itemId exactly. Use payload.locale for reason and suggestedAngle; keep label values exactly as required by the schema. Return only the requested JSON object.",
         },
         {
           role: "user",

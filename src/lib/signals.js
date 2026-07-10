@@ -460,6 +460,7 @@
 
   function buildFeedbackLearningPack(signals, options = {}) {
     const mode = clean(options.mode) || "growth";
+    const locale = options.locale === "en" ? "en" : "zh-CN";
     const generatedAt = clean(options.now) || new Date().toISOString();
     const limit = Math.max(1, Math.min(100, Number(options.limit) || 50));
     const feedbackSignals = (signals ?? [])
@@ -500,22 +501,34 @@
       withActualReplyCount: samples.filter((sample) => sample.actualReply).length,
     };
     const payload = {
-      title: "Ray Growth OS feedback learning pack",
+      title: "Growth workbench feedback learning pack",
       context,
       instructions: [
         "Identify which signal types are worth prioritizing next.",
         "Compare positive feedback samples against no-reply samples and explain the likely difference.",
         "Extract reply patterns from actualReply that should be reused, avoided, or tested again.",
         "Suggest concrete scoring-rule adjustments for the next batch of signals.",
-        "Return the answer in Chinese with: winning patterns, losing patterns, reusable reply templates, scoring changes, and next 5 actions.",
+        locale === "en"
+          ? "Return English sections for: winning patterns, losing patterns, reusable reply patterns, scoring changes, and next five actions."
+          : "使用简体中文输出：有效模式、无效模式、可复用回复模式、评分调整和接下来 5 个动作。",
       ],
       samples,
     };
 
+    const introduction = locale === "en"
+      ? [
+          "Analyze the execution samples below to identify which signals and drafts produced useful outcomes.",
+          "Compare originalSignal, executionStatus, feedback, actualReply, reason, and confidence. Distinguish observed evidence from hypotheses.",
+          "Return specific, reversible rules for the next signal-selection and draft-generation batch; avoid generic summaries.",
+        ]
+      : [
+          "基于下面的执行样本，分析哪些线索和草稿产生了有价值的结果。",
+          "重点比较 originalSignal、executionStatus、feedback、actualReply、reason 和 confidence，并区分观察到的事实与假设。",
+          "给出可直接用于下一轮筛选和草稿生成的具体、可撤销规则；避免泛泛总结。",
+        ];
+
     return [
-      "请作为 Ray Growth OS 的增长复盘分析师，基于下面的执行样本分析哪些线索和话术真正有效。",
-      "重点看 originalSignal、executionStatus、feedback、actualReply、reason、confidence 之间的关系。",
-      "不要泛泛总结，请给出可以直接改进下一轮线索筛选和回复生成的规则。",
+      ...introduction,
       "",
       "```json",
       JSON.stringify(payload, null, 2),

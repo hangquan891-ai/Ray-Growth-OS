@@ -84,6 +84,9 @@ test("buildStructuredGrokSignalPrompt asks for importable JSON only", () => {
   assert.match(prompt, /"accountRadar"/);
   assert.match(prompt, /confidence/);
   assert.match(prompt, /Never fabricate URLs/);
+
+  const englishPrompt = buildStructuredGrokSignalPrompt("find X signals", "en");
+  assert.match(englishPrompt, /Write all narrative fields in English/);
 });
 test("extractXUsername accepts handles and X profile URLs", () => {
   assert.equal(extractXUsername("@ray_codeproxy/status/123"), "ray_codeproxy");
@@ -107,6 +110,10 @@ test("buildXProfilePullPrompt turns a public X account into an account radar pro
   assert.match(prompt, /accountRadar/);
   assert.match(prompt, /不要读取私信/);
   assert.match(prompt, /互动队列/);
+
+  const englishPrompt = buildXProfilePullPrompt({ profileUrl: "@maker", contextPrompt: "find public signals", locale: "en" });
+  assert.match(englishPrompt, /Competitor-insight task/);
+  assert.match(englishPrompt, /Do not use DMs/);
 });
 
 

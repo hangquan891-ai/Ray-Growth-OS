@@ -2,6 +2,7 @@ export type GrokMode = "growth" | "outbound";
 
 export type GrokPromptInput = {
   mode: GrokMode;
+  locale?: "zh-CN" | "en";
   name: string;
   description: string;
   targetCustomer: string;
@@ -30,10 +31,37 @@ function normalizeUrl(value: string) {
 }
 
 export function buildGrokSearchPrompt(input: GrokPromptInput) {
+  const locale = input.locale === "en" ? "en" : "zh-CN";
   const modeLabel = input.mode === "growth" ? "X 受众增长" : "X 主动获客";
   const action = input.mode === "growth" ? "适合公开回复、引用或延展成内容选题" : "有购买、试用、替代方案或明确求助意向";
 
-  return `你是 Ray Growth OS 的线索雷达。请在 X 上帮我搜索最近 7 天的公开讨论，并只返回高质量候选信号。
+  if (locale === "en") {
+    const englishModeLabel = input.mode === "growth" ? "X audience growth" : "X outbound discovery";
+    const englishAction = input.mode === "growth" ? "suitable for a public reply, quote post, or content follow-up" : "showing purchase, trial, alternative-search, or explicit-help intent";
+    return `You are a public-signal discovery assistant. Search X for public discussions from the last 7 days and return only high-quality candidates.
+
+Mode: ${englishModeLabel}
+Account or product: ${clean(input.name)}
+Positioning: ${clean(input.description)}
+Target audience: ${clean(input.targetCustomer)}
+Growth goal or alternatives: ${clean(input.goalsOrCompetitors)}
+Topics or pain points: ${clean(input.pillarsOrPainPoints)}
+Search keywords: ${clean(input.keywords) || "infer from the positioning above"}
+
+Selection rules:
+1. The author should be close to the target audience.
+2. The post must contain a concrete question, pain point, request for help, search for alternatives, or clear interaction value.
+3. Exclude generic complaints, ads, giveaways, context-free short posts, and spam.
+4. Prefer posts ${englishAction}.
+5. Exclude the operator's own account, product account, posts, and replies. Return external users, third-party discussions, competitor audiences, or potential customers only.
+
+Return 8–15 results when quality supports it. Use exactly one line per result and no explanation or Markdown table:
+X | author or account | post URL | concise summary + why it matters
+
+If quality is low, return fewer results. Never invent URLs.`;
+  }
+
+  return `你是公开信号搜索助手。请在 X 上搜索最近 7 天的公开讨论，并只返回高质量候选信号。
 
 模式：${modeLabel}
 账号/产品：${clean(input.name)}

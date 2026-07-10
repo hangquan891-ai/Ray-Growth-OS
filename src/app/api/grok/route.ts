@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 type GrokRequest = {
   action?: "open" | "search" | "proxy-search" | "profile-pull";
+  locale?: "zh-CN" | "en";
   apiKey?: string;
   model?: string;
   prompt?: string;
@@ -231,14 +232,14 @@ export async function POST(request: Request) {
         );
       }
 
-      prompt = buildXProfilePullPrompt({ profileUrl, contextPrompt: prompt, profileSnapshot: pulledProfile.text });
+      prompt = buildXProfilePullPrompt({ profileUrl, contextPrompt: prompt, profileSnapshot: pulledProfile.text, locale: body.locale });
     }
 
     if (prompt.length > 14000) {
       return NextResponse.json({ ok: false, status: "error", message: "Prompt 太长，请控制在 14000 字以内。" }, { status: 400 });
     }
 
-    const structuredPrompt = buildStructuredGrokSignalPrompt(prompt);
+    const structuredPrompt = buildStructuredGrokSignalPrompt(prompt, body.locale);
     const proxyRequest = buildCodeProxyMessageRequest({ prompt: structuredPrompt, model });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60000);

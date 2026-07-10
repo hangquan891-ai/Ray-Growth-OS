@@ -44,6 +44,10 @@
     return mode === "outbound" ? "outbound" : "growth";
   }
 
+  function normalizeLocale(locale) {
+    return locale === "en" ? "en" : "zh-CN";
+  }
+
   function itemDraftKey(item) {
     const url = normalizeUrl(item?.url);
     if (url) return `url:${url}`;
@@ -178,7 +182,7 @@
     };
   }
 
-  function buildDraftRequestInput({ mode: modeInput, profile, items, feedbackSignals, growthMemory }) {
+  function buildDraftRequestInput({ mode: modeInput, profile, items, feedbackSignals, growthMemory, locale }) {
     const mode = normalizeMode(modeInput);
     const queueItems = (Array.isArray(items) ? items : []).slice(0, AI_DRAFT_LIMIT);
 
@@ -194,15 +198,14 @@
         productContext: clean(profile?.productContext),
       },
       styleGuide: {
-        language: "Chinese by default unless the source post is clearly English-only",
-        voice: "direct, useful, specific, low-hype, founder-builder tone",
+        language: normalizeLocale(locale) === "en" ? "English" : "Simplified Chinese",
+        voice: "direct, useful, specific, and low-hype",
         constraints: [
-          "Do not invent claims, metrics, or private context.",
-          "Avoid hard selling. Lead with a concrete observation or useful mini-framework.",
-          "Do not hide the author's identity or product completely when profile.productContext is provided; mention it lightly when it adds trust or context.",
-          "Every replyDraft should serve profile.replyGoal: include a natural next step, question, or reason to continue the conversation without sounding like an ad.",
-          "Keep reply drafts concise enough for X replies.",
-          "For growth mode, make replyDraft directly usable, quoteDraft suitable for quoting, postIdea useful as a later content seed, and outreachDraft suitable for a private follow-up without hard selling.",
+          "Use only the supplied post and profile. Do not invent claims, metrics, offers, links, or private context.",
+          "Start from a specific observation, question, or useful next step related to the source post; avoid generic praise and advertising language.",
+          "Treat profile.productContext as a disclosure policy. Mention a product or identity only when it improves relevance or trust.",
+          "Keep drafts concise enough for their intended X use. Do not assume consent to contact or promise a service that the profile did not state.",
+          "For growth mode, make replyDraft ready to post, quoteDraft suitable for a quote post, postIdea a distinct content seed, and outreachDraft a respectful optional follow-up.",
         ],
       },
       styleSamples: buildStyleSamples(feedbackSignals),
@@ -276,7 +279,7 @@
         {
           role: "system",
           content:
-            "You are the draft generation engine for Ray Growth OS. Write practical, specific drafts in Ray's voice. Use profile.productContext and profile.replyGoal as the commercial intent: naturally reveal who Ray is or what the product/account does when useful, and include a light next step without hard selling. If growthMemory is provided, follow its proven style rules and avoid patterns. Preserve itemId exactly. Return only the requested structured output.",
+            "Generate concise, source-specific engagement drafts for a public-growth workflow. Follow the payload styleGuide and use payload.locale for every narrative field. Use growthMemory as optional historical feedback, not as a source of facts. Preserve itemId exactly. Do not fabricate context or write generic sales copy. Return only the requested JSON object.",
         },
         {
           role: "user",

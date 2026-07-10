@@ -237,7 +237,7 @@ test("buildFeedbackLearningPack exports AI review samples with feedback and actu
     { mode: "growth", now: "2026-07-07T12:00:00.000Z" }
   );
 
-  assert.match(pack, /Ray Growth OS/);
+  assert.match(pack, /Growth workbench/);
   const jsonText = pack.match(/```json\n([\s\S]*?)\n```/)?.[1];
   assert.ok(jsonText);
   const payload = JSON.parse(jsonText);

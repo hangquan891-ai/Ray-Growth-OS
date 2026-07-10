@@ -24,25 +24,32 @@
     return mode === "outbound" ? "outbound" : "growth";
   }
 
+  function normalizeLocale(locale) {
+    return locale === "en" ? "en" : "zh-CN";
+  }
+
   function compactText(value, limit) {
     const text = clean(value).replace(/\s+/g, " ");
     if (text.length <= limit) return text;
     return `${text.slice(0, Math.max(0, limit - 1)).trim()}…`;
   }
 
-  function normalizeGeneratedProfile(rawValue, modeInput) {
+  function normalizeGeneratedProfile(rawValue, modeInput, localeInput) {
     const mode = normalizeMode(modeInput);
+    const locale = normalizeLocale(localeInput);
     const source = rawValue && typeof rawValue === "object" ? rawValue : {};
     const profile = source.profile && typeof source.profile === "object" ? source.profile : source;
 
-    const fallbackGoal =
-      mode === "outbound"
-        ? "先建立可信互动，确认对方是否有当前痛点，再轻量邀请试用或继续沟通。"
+    const fallbackGoal = locale === "en"
+      ? mode === "outbound"
+        ? "Start a relevant conversation and confirm the current problem before proposing a next step."
+        : "Contribute one actionable idea that invites a follow-up or continued discussion."
+      : mode === "outbound"
+        ? "先建立可信互动，确认对方是否有当前痛点，再讨论是否需要下一步。"
         : "先贡献一个可执行观点，让对方愿意关注、回复或继续交流。";
-    const fallbackContext =
-      mode === "outbound"
-        ? "自然说明我正在做这个产品，只有在对方痛点明确时再提到下一步，不要硬卖。"
-        : "自然说明我的身份和长期记录的主题，优先提供价值，不要像广告。";
+    const fallbackContext = locale === "en"
+      ? "Mention the operator or product only when it makes the reply more relevant; do not make unverified claims."
+      : "只在有助于理解回复时说明身份或产品，不写无法验证的承诺。";
 
     return {
       productName: compactText(profile.productName, FIELD_LIMITS.productName),
@@ -56,31 +63,52 @@
     };
   }
 
-  function buildProfileRequestInput({ mode: modeInput, xProfileUrl, current }) {
+  function buildProfileRequestInput({ mode: modeInput, xProfileUrl, current, locale: localeInput }) {
     const mode = normalizeMode(modeInput);
+    const locale = normalizeLocale(localeInput);
+    const growthFields = locale === "en"
+      ? {
+          productName: "Account or product name",
+          competitors: "Growth goal or alternatives",
+          description: "Positioning",
+          targetCustomer: "Target audience",
+          painPoints: "Topics or pain points",
+          replyGoal: "Engagement goal or next step",
+          productContext: "When and how to disclose the product or identity",
+        }
+      : {
+          productName: "账号名称",
+          competitors: "增长目标",
+          description: "账号定位",
+          targetCustomer: "目标读者",
+          painPoints: "内容支柱",
+          replyGoal: "互动目的或下一步",
+          productContext: "产品/身份露出方式",
+        };
+    const outboundFields = locale === "en"
+      ? {
+          productName: "Product name",
+          competitors: "Competitors or alternatives",
+          description: "Product description",
+          targetCustomer: "Target customer",
+          painPoints: "Core pain points",
+          replyGoal: "Engagement goal or next step",
+          productContext: "When and how to disclose the product or identity",
+        }
+      : {
+          productName: "产品名称",
+          competitors: "竞品或替代方案",
+          description: "产品描述",
+          targetCustomer: "目标客户",
+          painPoints: "核心痛点",
+          replyGoal: "互动目的或下一步",
+          productContext: "产品/身份露出方式",
+        };
     return {
       mode,
+      locale,
       xProfileUrl: clean(xProfileUrl),
-      fieldMeaning:
-        mode === "outbound"
-          ? {
-              productName: "产品名称",
-              competitors: "竞品或替代方案",
-              description: "产品描述",
-              targetCustomer: "目标客户",
-              painPoints: "核心痛点",
-              replyGoal: "互动目的或下一步",
-              productContext: "产品/身份露出方式",
-            }
-          : {
-              productName: "账号名称",
-              competitors: "增长目标",
-              description: "账号定位",
-              targetCustomer: "目标读者",
-              painPoints: "内容支柱",
-              replyGoal: "互动目的或下一步",
-              productContext: "产品/身份露出方式",
-            },
+      fieldMeaning: mode === "outbound" ? outboundFields : growthFields,
       current: {
         productName: clean(current?.productName),
         competitors: clean(current?.competitors),
@@ -91,11 +119,11 @@
         productContext: clean(current?.productContext),
       },
       rules: [
-        "用中文输出，像可直接粘进表单的定位草稿。",
-        "优先根据公开 X 主页地址、账号名、简介和已有填写内容推断；如果不能读取主页，不要假装看到了具体动态。",
-        "生成内容必须能用于后续 Grok 找目标讨论、AI 评分和回复草稿。",
-        "replyGoal 要说明这次互动想让对方做什么，productContext 要说明什么时候露出身份/产品。",
-        "不要写空泛口号，不要写粉丝数、帖子数等无法验证的数据。",
+        locale === "en" ? "Write all fields in English." : "所有字段使用简体中文。",
+        "Infer only from the public X URL and the supplied fields. If the profile cannot be read, do not present unseen posts or metrics as fact.",
+        "Produce form-ready positioning that can guide public-discussion discovery, scoring, and draft generation.",
+        "Make replyGoal concrete and make productContext a clear disclosure rule, not a sales slogan.",
+        "Avoid generic slogans and unverifiable metrics such as follower or post counts.",
       ],
     };
   }
@@ -136,7 +164,7 @@
         {
           role: "system",
           content:
-            "You are the onboarding positioning assistant for Ray Growth OS. Generate concise Chinese form fields for a GTM/growth workflow from a public X profile URL and any existing user input. Be practical, commercially useful, and honest about uncertainty. Return only the requested structured output.",
+            "Create concise, form-ready positioning for a public-growth workflow. Use only the public X URL and supplied user input; never claim to have read unavailable profile data. Follow payload.locale for every generated field, keep uncertainty explicit, and return only the requested JSON object.",
         },
         {
           role: "user",
