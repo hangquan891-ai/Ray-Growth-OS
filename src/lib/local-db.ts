@@ -31,6 +31,21 @@ type LocalStateRow = {
   updated_at: string;
 };
 
+export type LocalStateWriteResult = {
+  changed: boolean;
+  updatedAt: string;
+};
+
+export class LocalStateConflictError extends Error {
+  currentUpdatedAt: string | null;
+
+  constructor(currentUpdatedAt: string | null) {
+    super("Local state changed after it was read.");
+    this.name = "LocalStateConflictError";
+    this.currentUpdatedAt = currentUpdatedAt;
+  }
+}
+
 type DatabaseHolder = {
   database?: DatabaseSync;
 };
@@ -64,6 +79,15 @@ function ensureSchema(database: DatabaseSync) {
       value_json TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS app_state_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope TEXT NOT NULL CHECK (scope IN ('settings', 'workbench')),
+      value_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      archived_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS app_state_history_scope_id
+      ON app_state_history(scope, id DESC);
     CREATE TABLE IF NOT EXISTS ai_diagnostics (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       action TEXT NOT NULL,
@@ -129,23 +153,88 @@ export function getLocalState(scope: LocalStateScope) {
   }
 }
 
-export function setLocalState(scope: LocalStateScope, value: unknown) {
+export function setLocalState(
+  scope: LocalStateScope,
+  value: unknown,
+  expectedUpdatedAt?: string | null
+): LocalStateWriteResult {
+  const database = getDatabase();
   const valueJson = JSON.stringify(value);
-  const updatedAt = new Date().toISOString();
-  getDatabase()
-    .prepare(`
-      INSERT INTO app_state (scope, value_json, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(scope) DO UPDATE SET
-        value_json = excluded.value_json,
-        updated_at = excluded.updated_at
-    `)
-    .run(scope, valueJson, updatedAt);
-  return updatedAt;
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const current = database
+      .prepare("SELECT value_json, updated_at FROM app_state WHERE scope = ?")
+      .get(scope) as LocalStateRow | undefined;
+    const currentUpdatedAt = current?.updated_at ?? null;
+
+    // Identical writes are safe no-ops even if the caller read an older revision.
+    if (current?.value_json === valueJson) {
+      database.exec("COMMIT");
+      return { changed: false, updatedAt: current.updated_at };
+    }
+
+    if (expectedUpdatedAt !== undefined && currentUpdatedAt !== expectedUpdatedAt) {
+      throw new LocalStateConflictError(currentUpdatedAt);
+    }
+
+    let updatedAt = new Date().toISOString();
+    if (updatedAt === currentUpdatedAt) {
+      updatedAt = new Date(Date.parse(updatedAt) + 1).toISOString();
+    }
+
+    if (current) {
+      database.prepare(`
+        INSERT INTO app_state_history (scope, value_json, updated_at, archived_at)
+        VALUES (?, ?, ?, ?)
+      `).run(scope, current.value_json, current.updated_at, updatedAt);
+    }
+
+    database.prepare(`
+        INSERT INTO app_state (scope, value_json, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(scope) DO UPDATE SET
+          value_json = excluded.value_json,
+          updated_at = excluded.updated_at
+      `)
+      .run(scope, valueJson, updatedAt);
+
+    database.prepare(`
+      DELETE FROM app_state_history
+      WHERE scope = ? AND id NOT IN (
+        SELECT id FROM app_state_history WHERE scope = ? ORDER BY id DESC LIMIT 100
+      )
+    `).run(scope, scope);
+
+    database.exec("COMMIT");
+    return { changed: true, updatedAt };
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function clearLocalState(scope: LocalStateScope) {
-  return Number(getDatabase().prepare("DELETE FROM app_state WHERE scope = ?").run(scope).changes) > 0;
+  const database = getDatabase();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const current = database
+      .prepare("SELECT value_json, updated_at FROM app_state WHERE scope = ?")
+      .get(scope) as LocalStateRow | undefined;
+    if (!current) {
+      database.exec("COMMIT");
+      return false;
+    }
+    database.prepare(`
+      INSERT INTO app_state_history (scope, value_json, updated_at, archived_at)
+      VALUES (?, ?, ?, ?)
+    `).run(scope, current.value_json, current.updated_at, new Date().toISOString());
+    database.prepare("DELETE FROM app_state WHERE scope = ?").run(scope);
+    database.exec("COMMIT");
+    return true;
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 function safeDiagnosticText(value: unknown, maxLength = 500) {

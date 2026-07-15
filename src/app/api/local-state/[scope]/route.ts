@@ -1,4 +1,4 @@
-import { clearLocalState, getLocalState, setLocalState, type LocalStateScope } from "@/lib/local-db";
+import { LocalStateConflictError, clearLocalState, getLocalState, setLocalState, type LocalStateScope } from "@/lib/local-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,12 +56,48 @@ export async function PUT(request: Request, context: RouteContext) {
     return Response.json({ ok: false, message: "Local state is larger than the supported limit." }, { status: 413 });
   }
 
-  const updatedAt = setLocalState(scope, value);
-  return Response.json({ ok: true, updatedAt });
+  const hasExpectedRevision = Boolean(body && typeof body === "object" && "expectedUpdatedAt" in body);
+  if (scope === "workbench" && !hasExpectedRevision) {
+    return Response.json(
+      { ok: false, code: "REVISION_REQUIRED", message: "Workbench writes require the revision returned by the latest read." },
+      { status: 428 }
+    );
+  }
+
+  const rawExpectedUpdatedAt = hasExpectedRevision
+    ? (body as { expectedUpdatedAt: unknown }).expectedUpdatedAt
+    : undefined;
+  if (rawExpectedUpdatedAt !== undefined && rawExpectedUpdatedAt !== null && typeof rawExpectedUpdatedAt !== "string") {
+    return Response.json({ ok: false, message: "expectedUpdatedAt must be a string or null." }, { status: 400 });
+  }
+
+  try {
+    const result = setLocalState(scope, value, rawExpectedUpdatedAt as string | null | undefined);
+    return Response.json({ ok: true, ...result });
+  } catch (error) {
+    if (error instanceof LocalStateConflictError) {
+      return Response.json(
+        {
+          ok: false,
+          code: "STATE_CONFLICT",
+          currentUpdatedAt: error.currentUpdatedAt,
+          message: "Workbench data changed in another page. The stale snapshot was not saved.",
+        },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const scope = await readScope(context);
   if (!scope) return invalidScopeResponse();
+  if (scope === "workbench") {
+    return Response.json(
+      { ok: false, code: "REVISION_REQUIRED", message: "Clear the workbench with a revision-checked replacement instead." },
+      { status: 405 }
+    );
+  }
   return Response.json({ ok: true, deleted: clearLocalState(scope) });
 }

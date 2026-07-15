@@ -244,7 +244,7 @@ async function saveUpdate(update) {
   return update;
 }
 
-async function rememberSourceFromApp(item, url) {
+async function rememberSourceFromApp(item, url, selfUsername = "") {
   const sourceUrl = normalizeUrl(url || item?.sourceUrl || item?.url);
   if (!sourceUrl || !statusKeyFromUrl(sourceUrl)) {
     return { ok: false, message: "这个链接不是有效的 X 原帖链接。" };
@@ -264,10 +264,13 @@ async function rememberSourceFromApp(item, url) {
     ? queue.map((candidate) => (signalKey(candidate) === itemId || sameStatusUrl(candidate.sourceUrl || candidate.url, sourceUrl) ? { ...candidate, ...preparedItem } : candidate))
     : [preparedItem, ...queue];
 
-  await storageSet({
+  const syncedUsername = normalizeUsername(selfUsername);
+  const nextStorage = {
     rayQueue: nextQueue,
     rayRecentSource: { itemId, sourceUrl, savedAt: new Date().toISOString() },
-  });
+  };
+  if (isValidXUsername(syncedUsername)) nextStorage.raySelfUsername = syncedUsername;
+  await storageSet(nextStorage);
 
   return { ok: true, message: "已记住这条原帖。你在 X 点回复发布后，插件会自动扫描并回写。" };
 }
@@ -283,7 +286,7 @@ async function processScan(scan, tabId) {
   const pendingByTab = stored.rayPendingByTab || {};
   const currentUrl = normalizeUrl(scan?.current?.url || scan?.url);
 
-  if (!queue.length) return { ok: false, message: "插件还没有读取 App 队列。请先在插件里点一次“从 App 读取队列”。" };
+  if (!queue.length) return { ok: false, message: "当前原帖还没有和 App 队列关联。请从 App 点击“复制回复并打开原帖”进入 X。" };
   if (!selfUsername) return { ok: false, message: "请先保存你的 X 用户名，例如 Ray_Codeproxy，不是展示名。" };
 
   let sourceMatch = findQueueItemBySource(queue, currentUrl);
@@ -336,16 +339,6 @@ async function processScan(scan, tabId) {
     appliedCount,
     message,
   };
-}
-
-async function syncFromApp() {
-  const tab = await findAppTab();
-  if (!tab?.id) throw new Error("请先打开 Ray Growth OS 页面。通常是 http://localhost:3001 或 http://127.0.0.1:3001");
-  const response = await sendToTabWithInjection(tab, { type: "RAY_READ_WORKBENCH" }, "app-bridge.js");
-  if (!response?.ok) throw new Error(response?.message || "读取 App 队列失败。请刷新 App 页面后重试。");
-  const stored = await storageGet(["raySelfUsername"]);
-  await storageSet({ rayQueue: response.queue || [], raySelfUsername: response.selfUsername || stored.raySelfUsername || "", rayReplyScanCursor: 0 });
-  return { ...response, message: `已读取 ${response.queue?.length || 0} 条队列。` };
 }
 
 async function scanCurrentXTab() {
@@ -490,7 +483,7 @@ async function applyUpdatesToApp(options = {}) {
   const response = await sendToTabWithInjection(tab, { type: "RAY_APPLY_FEEDBACK_UPDATES", updates }, "app-bridge.js");
   if (!response?.ok) throw new Error(response?.message || "回写 App 失败。请刷新 App 页面后重试。");
   if (Number(response.appliedCount || 0) === 0) {
-    throw new Error("App 没有匹配到待回写的队列条目，反馈仍保留在插件中。请先从 App 重新读取队列后再回写。");
+    throw new Error("App 没有匹配到待回写的队列条目，反馈仍保留在插件中。请确认该条目仍在 App 队列中，再从 App 打开一次原帖后重试。");
   }
   await storageRemove("rayUpdates");
   return {
@@ -531,11 +524,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await storageSet({ raySelfUsername: username });
         return { ...(await getState()), message: `已保存 X 用户名：@${username}` };
       }
-      if (message?.type === "POPUP_SYNC_APP") return await syncFromApp();
       if (message?.type === "POPUP_SCAN_X") return await scanCurrentXTab();
       if (message?.type === "POPUP_REFRESH_REPLIES") return await refreshSavedReplies();
       if (message?.type === "POPUP_APPLY_APP") return await applyUpdatesToApp();
-      if (message?.type === "RAY_APP_SOURCE_OPENED") return await rememberSourceFromApp(message.item, message.url);
+      if (message?.type === "RAY_APP_SOURCE_OPENED") return await rememberSourceFromApp(message.item, message.url, message.selfUsername);
       if (message?.type === "RAY_X_SCAN_RESULT") return await processScan(message.scan, sender.tab?.id || 0);
       return { ok: false, message: "未知操作。" };
     } catch (error) {

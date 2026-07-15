@@ -5,3 +5,9 @@ dist
 *.tsbuildinfo
 .env*.local
 npm-debug.log*
+.qa/
+.qa-data/
+.recovery/
+*.db
+*.db-shm
+*.db-wal

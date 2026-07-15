@@ -8,6 +8,16 @@
 
 > 第一次使用？先看 [使用指南：从定位到反馈复盘](docs/USER_GUIDE.zh-CN.md)。
 
+## 项目赞助
+
+<a href="https://codeproxy.dev/register?aff=KTYG4RK7">
+  <img src="docs/codeproxy-sponsor.png" alt="CodeProxy" width="900">
+</a>
+
+[CodeProxy](https://codeproxy.dev/register?aff=KTYG4RK7) 为 OpenClaw、Hermes Agent、Codex 和 Claude Code 用户提供订阅服务。
+
+使用邀请码注册，赠送 **2 美元体验金**和 **1 日订阅套餐**（自动发放）。邀请码：`KTYG4RK7`
+
 ## 它能做什么
 
 ```text
@@ -66,6 +76,8 @@ npm run dev
 
 设置和新工作台数据会保存到本机 SQLite 数据库，因此同一台电脑、同一端口下打开的不同浏览器会读取同一份数据。首次升级只会迁移当前浏览器中已有的 Grok、AI 和 X 主页设置；旧定位、队列、评分、草稿、反馈和增长记忆不会迁移，方便从空白工作台重新测试。
 
+工作台写入采用版本校验，不再使用“最后一次写入直接覆盖”。多个页面或插件同时更新时会先合并再重试；页面加载后如果数据没有变化不会重复写库；SQLite 还会保留最近 100 个旧版本作为本地恢复记录。
+
 数据库默认位置：Windows 为 `%LOCALAPPDATA%\RayGrowthOS\ray-growth-os.db`，macOS 为 `~/Library/Application Support/RayGrowthOS/ray-growth-os.db`，Linux 为 `$XDG_DATA_HOME/ray-growth-os/ray-growth-os.db`（未设置时使用 `~/.local/share/ray-growth-os/`）。可通过 `RAY_GROWTH_OS_DATA_DIR` 修改目录。
 
 这仍然是本地单用户安全模型：API 密钥只保存在本机，也不会进入工作台 JSON 备份，但并没有使用托管密钥系统保护。若要部署给多位用户，请先迁移到服务端密钥管理。
@@ -95,7 +107,7 @@ npm run build      # 生产构建
 
 ### 它做什么
 
-1. 从打开的工作台页面读取本地互动队列。
+1. 从工作台打开原帖时，自动读取并关联当前互动条目。
 2. 关联 X 原帖与你亲自发送的回复。
 3. 当回复出现在 X 公开页面中时，保存该回复链接。
 4. 巡检公开互动结果，并回写到本地工作台。
@@ -112,14 +124,14 @@ npm run build      # 生产构建
 
 ### 使用流程
 
-1. 打开插件弹窗，填写你的 X 用户名（`@` 后面的部分）；或者先在 App 设置中保存公开 X 主页。
-2. 点击**从 App 读取队列**。
-3. 从工作台打开原帖，并由你本人在 X 上回复。
+1. 在 App 设置中保存公开 X 主页，或者在插件弹窗里保存一次 X 用户名（`@` 后面的部分）；弹窗不需要保持打开。
+2. 从工作台点击**复制回复并打开原帖**。插件会自动读取并关联当前条目，不需要手动读取队列。
+3. 由你本人在 X 上回复。
 4. 回复出现在当前原帖对话页后，插件会自动回写；若漏抓，点击**找回当前页回复并回写**。
 5. 只有回复链接已经记录后，才点击**巡检已记录的回复链接**检查后续公开反馈。
 
 “巡检已记录的回复链接”不能反向找回从未保存的回复链接。更新插件代码后，需在 `chrome://extensions/` 点击“重新加载”，并刷新已打开的 App/X 页面。
-5. 如果 App 当时未打开，之后保持工作台页面打开，再点击**手动回写暂存反馈**。
+如果 App 当时未打开，之后保持工作台页面打开，再点击**手动回写暂存反馈**。
 
 插件依赖 X 公开页面 DOM；X 的页面结构变化后可能需要适配。更具体的中文实现说明见[插件 README](extension/ray-growth-os-x-helper/README.md)。
 

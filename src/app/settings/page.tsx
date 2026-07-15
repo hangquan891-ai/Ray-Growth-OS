@@ -18,7 +18,7 @@ import {
   normalizeGrokProxyConfig,
   normalizeXProfileConfig,
 } from "@/lib/codeproxy-grok";
-import { loadSharedSettings, saveSharedSettings, type SharedSettings, writeLocalState } from "@/lib/local-state-client";
+import { loadSharedSettings, readLocalState, saveSharedSettings, type SharedSettings, writeLocalState } from "@/lib/local-state-client";
 import { DEFAULT_WORKBENCH_STATE } from "@/lib/workbench-state";
 
 const CODEPROXY_MESSAGES_URL = "https://codeproxy.dev/v1/messages";
@@ -166,7 +166,8 @@ export default function SettingsPage() {
     if (!confirmed) return;
 
     try {
-      await writeLocalState("workbench", DEFAULT_WORKBENCH_STATE);
+      const currentWorkbench = await readLocalState<unknown>("workbench");
+      await writeLocalState("workbench", DEFAULT_WORKBENCH_STATE, { expectedUpdatedAt: currentWorkbench.updatedAt });
       notify(tr("已清空工作台测试数据，密钥配置已保留。返回工作台后会从空白状态开始。", "Local workbench data was cleared and API settings were kept. The workbench will start empty."), "success");
     } catch {
       notify(tr("清空失败：无法写入本机共享数据库，请确认本地服务仍在运行。", "Clear failed because the shared local database is unavailable. Make sure the local service is running."), "error");

@@ -24,6 +24,16 @@ type LocalStateResponse<T> = {
   message?: string;
 };
 
+export class LocalStateConflictError extends Error {
+  currentUpdatedAt: string | null;
+
+  constructor(message: string, currentUpdatedAt: string | null) {
+    super(message);
+    this.name = "LocalStateConflictError";
+    this.currentUpdatedAt = currentUpdatedAt;
+  }
+}
+
 async function parseResponse<T extends { ok: boolean; message?: string }>(response: Response) {
   const body = (await response.json().catch(() => null)) as (T & { message?: string }) | null;
   if (!response.ok || !body?.ok) {
@@ -37,13 +47,31 @@ export async function readLocalState<T>(scope: LocalStateScope) {
   return parseResponse<LocalStateResponse<T>>(response);
 }
 
-export async function writeLocalState(scope: LocalStateScope, value: object) {
+export async function writeLocalState(
+  scope: LocalStateScope,
+  value: object,
+  options?: { expectedUpdatedAt: string | null }
+) {
   const response = await fetch(`/api/local-state/${scope}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ value }),
+    body: JSON.stringify({ value, ...(options ? { expectedUpdatedAt: options.expectedUpdatedAt } : {}) }),
   });
-  return parseResponse<{ ok: boolean; updatedAt: string; message?: string }>(response);
+  const body = (await response.json().catch(() => null)) as {
+    ok: boolean;
+    changed?: boolean;
+    updatedAt?: string;
+    currentUpdatedAt?: string | null;
+    code?: string;
+    message?: string;
+  } | null;
+  if (response.status === 409 && body?.code === "STATE_CONFLICT") {
+    throw new LocalStateConflictError(body.message || "Local state changed in another page.", body.currentUpdatedAt ?? null);
+  }
+  if (!response.ok || !body?.ok || !body.updatedAt) {
+    throw new Error(body?.message || `Local storage request failed (${response.status}).`);
+  }
+  return { ok: true, changed: Boolean(body.changed), updatedAt: body.updatedAt };
 }
 
 function readJson(key: string) {

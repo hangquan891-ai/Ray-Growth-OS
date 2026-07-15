@@ -352,6 +352,26 @@
   }
 }
 
+.onboarding-target-active {
+  animation: onboardingTargetPulse 1.15s ease-in-out 4;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.78), 0 0 48px rgba(59, 130, 246, 0.24);
+}
+
+@keyframes onboardingTargetPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.68), 0 0 32px rgba(59, 130, 246, 0.16);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.92), 0 0 64px rgba(59, 130, 246, 0.34);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-target-active {
+    animation: none;
+  }
+}
+
 @media (max-width: 640px) {
   .tech-shell {
     padding-left: 0.875rem;

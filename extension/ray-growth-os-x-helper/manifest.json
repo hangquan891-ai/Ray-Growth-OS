@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ray Growth OS X Helper",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "把 Ray Growth OS 的互动队列和已登录的 X 页面连接起来，自动记录回复链接和公开反馈。",
   "permissions": ["storage", "tabs", "scripting"],
   "host_permissions": [

@@ -66,6 +66,11 @@
     nextExperiment: "",
   };
 
+  const DEFAULT_ONBOARDING_STATE = {
+    startedAt: "",
+    welcomeDismissedAt: "",
+  };
+
   const DEFAULT_WORKBENCH_STATE = {
     version: CURRENT_VERSION,
     mode: "growth",
@@ -75,6 +80,7 @@
     aiScores: DEFAULT_AI_SCORE_STATE,
     aiDrafts: DEFAULT_AI_DRAFT_STATE,
     growthMemory: DEFAULT_GROWTH_MEMORY_STATE,
+    onboarding: DEFAULT_ONBOARDING_STATE,
   };
 
   function isPlainObject(value) {
@@ -307,6 +313,17 @@
       nextExperiment: stringOrFallback(source.nextExperiment, base.nextExperiment),
     };
   }
+
+  function normalizeOnboardingState(input, fallback) {
+    const source = isPlainObject(input) ? input : {};
+    const base = isPlainObject(fallback) ? fallback : DEFAULT_ONBOARDING_STATE;
+
+    return {
+      startedAt: stringOrFallback(source.startedAt, base.startedAt),
+      welcomeDismissedAt: stringOrFallback(source.welcomeDismissedAt, base.welcomeDismissedAt),
+    };
+  }
+
   function normalizeWorkbenchState(input, fallback = DEFAULT_WORKBENCH_STATE) {
     const source = isPlainObject(input) ? input : {};
     const base = isPlainObject(fallback) ? fallback : DEFAULT_WORKBENCH_STATE;
@@ -320,7 +337,102 @@
       aiScores: normalizeAiScoresState(source.aiScores, base.aiScores),
       aiDrafts: normalizeAiDraftsState(source.aiDrafts, base.aiDrafts),
       growthMemory: normalizeGrowthMemoryState(source.growthMemory, base.growthMemory),
+      onboarding: normalizeOnboardingState(source.onboarding, base.onboarding),
     };
+  }
+
+  function valuesEqual(left, right) {
+    if (left === right) return true;
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function cloneValue(value) {
+    if (value === undefined) return undefined;
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function signalMergeKey(signal, index) {
+    if (!isPlainObject(signal)) return `index:${index}:${JSON.stringify(signal)}`;
+    return String(
+      signal.id
+      || signal.url
+      || signal.replyUrl
+      || `${signal.author || "unknown"}:${signal.text || ""}`
+      || `index:${index}`
+    );
+  }
+
+  function mergeSignalArrays(base, local, remote, path) {
+    const baseItems = Array.isArray(base) ? base : [];
+    const localItems = Array.isArray(local) ? local : [];
+    const remoteItems = Array.isArray(remote) ? remote : [];
+    const toMap = (items) => new Map(items.map((item, index) => [signalMergeKey(item, index), item]));
+    const baseMap = toMap(baseItems);
+    const localMap = toMap(localItems);
+    const remoteMap = toMap(remoteItems);
+    const orderedKeys = [
+      ...remoteItems.map(signalMergeKey),
+      ...localItems.map(signalMergeKey),
+      ...baseItems.map(signalMergeKey),
+    ].filter((key, index, keys) => keys.indexOf(key) === index);
+
+    return orderedKeys.flatMap((key) => {
+      const merged = mergeConcurrentValue(baseMap.get(key), localMap.get(key), remoteMap.get(key), `${path}.${key}`);
+      return merged === undefined ? [] : [merged];
+    });
+  }
+
+  function mergeConcurrentValue(base, local, remote, path) {
+    if (valuesEqual(local, base)) return cloneValue(remote);
+    if (valuesEqual(remote, base)) return cloneValue(local);
+    if (valuesEqual(local, remote)) return cloneValue(local);
+
+    // When one side deletes an entry while the other side changes it, retain the
+    // changed entry. This deliberately favors recoverability over destructive merges.
+    if (local === undefined && remote !== undefined) return cloneValue(remote);
+    if (remote === undefined && local !== undefined) return cloneValue(local);
+
+    if (Array.isArray(local) || Array.isArray(remote) || Array.isArray(base)) {
+      if (path === "signals.outbound" || path === "signals.growth") {
+        return mergeSignalArrays(base, local, remote, path);
+      }
+      return cloneValue(local);
+    }
+
+    if (isPlainObject(local) || isPlainObject(remote) || isPlainObject(base)) {
+      const baseObject = isPlainObject(base) ? base : {};
+      const localObject = isPlainObject(local) ? local : {};
+      const remoteObject = isPlainObject(remote) ? remote : {};
+      const keys = new Set([
+        ...Object.keys(baseObject),
+        ...Object.keys(localObject),
+        ...Object.keys(remoteObject),
+      ]);
+      const merged = {};
+      keys.forEach((key) => {
+        const nextValue = mergeConcurrentValue(
+          baseObject[key],
+          localObject[key],
+          remoteObject[key],
+          path ? `${path}.${key}` : key
+        );
+        if (nextValue !== undefined) merged[key] = nextValue;
+      });
+      return merged;
+    }
+
+    // Both clients changed the same scalar field. The active client's value wins;
+    // unrelated remote fields have already been retained by the recursive merge.
+    return cloneValue(local);
+  }
+
+  function mergeConcurrentWorkbenchState(base, local, remote) {
+    const normalizedBase = normalizeWorkbenchState(base);
+    const normalizedLocal = normalizeWorkbenchState(local);
+    const normalizedRemote = normalizeWorkbenchState(remote);
+    return normalizeWorkbenchState(
+      mergeConcurrentValue(normalizedBase, normalizedLocal, normalizedRemote, "")
+    );
   }
 
   function parseStoredWorkbenchState(rawValue, fallback = DEFAULT_WORKBENCH_STATE) {
@@ -389,12 +501,14 @@
   return {
     CURRENT_VERSION,
     createOperationalWorkbenchSnapshot,
+    mergeConcurrentWorkbenchState,
     createWorkbenchBackup,
     parseWorkbenchBackup,
     DEFAULT_AI_DRAFT_STATE,
     DEFAULT_AI_SCORE_STATE,
     DEFAULT_GROK_BRIDGE_STATE,
     DEFAULT_GROWTH_MEMORY_STATE,
+    DEFAULT_ONBOARDING_STATE,
     DEFAULT_SIGNAL_STATE,
     DEFAULT_WORKBENCH_STATE,
     WORKBENCH_STORAGE_KEY,

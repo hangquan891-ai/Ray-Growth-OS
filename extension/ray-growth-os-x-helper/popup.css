@@ -21,7 +21,15 @@ button { height: 36px; border: 1px solid rgba(148,163,184,.22); border-radius: 8
 button:hover { border-color: rgba(59,130,246,.55); background: rgba(59,130,246,.22); }
 button:disabled { cursor: not-allowed; opacity: .48; }
 .actions { display: grid; gap: 8px; margin-top: 12px; }
-.actions button:first-child, .actions button:last-child { background: linear-gradient(135deg, rgba(59,130,246,.9), rgba(14,165,233,.72)); border-color: rgba(147,197,253,.42); }
+.actions-title { margin: 0 0 2px; color: rgba(248,250,252,.42); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.automation { display: flex; align-items: flex-start; gap: 9px; margin: 12px 0; border: 1px solid rgba(16,185,129,.24); border-radius: 10px; padding: 10px; background: rgba(16,185,129,.08); }
+.automation-dot { width: 8px; height: 8px; margin-top: 5px; flex: 0 0 auto; border-radius: 999px; background: #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.10); }
+.automation b { display: block; color: #bbf7d0; font-size: 12px; }
+.automation p { margin: 4px 0 0; color: rgba(209,250,229,.62); font-size: 11px; line-height: 1.5; }
+.automation[data-state="setup"] { border-color: rgba(245,158,11,.24); background: rgba(245,158,11,.08); }
+.automation[data-state="setup"] .automation-dot { background: #fbbf24; box-shadow: 0 0 0 4px rgba(251,191,36,.10); }
+.automation[data-state="setup"] b { color: #fde68a; }
+.automation[data-state="setup"] p { color: rgba(254,243,199,.62); }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
 .stats div { border: 1px solid rgba(148,163,184,.14); border-radius: 10px; padding: 10px; background: rgba(2,6,23,.45); }
 .stats b { display: block; font-size: 20px; }

@@ -80,21 +80,34 @@
     }
   }
 
-  async function readLocalState(scope) {
+  async function readLocalStateRecord(scope) {
     const response = await fetch(`${window.location.origin}/api/local-state/${scope}`, { cache: "no-store" });
     const body = await response.json().catch(() => null);
     if (!response.ok || !body?.ok) throw new Error(body?.message || "Local database request failed.");
-    return body.exists && body.value && typeof body.value === "object" ? body.value : {};
+    return {
+      exists: Boolean(body.exists),
+      updatedAt: typeof body.updatedAt === "string" ? body.updatedAt : null,
+      value: body.exists && body.value && typeof body.value === "object" ? body.value : {},
+    };
   }
 
-  async function writeLocalState(scope, value) {
+  async function readLocalState(scope) {
+    return (await readLocalStateRecord(scope)).value;
+  }
+
+  async function writeLocalState(scope, value, expectedUpdatedAt) {
     const response = await fetch(`${window.location.origin}/api/local-state/${scope}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value }),
+      body: JSON.stringify({ value, expectedUpdatedAt }),
     });
     const body = await response.json().catch(() => null);
-    if (!response.ok || !body?.ok) throw new Error(body?.message || "Local database request failed.");
+    if (!response.ok || !body?.ok) {
+      const error = new Error(body?.message || "Local database request failed.");
+      error.code = body?.code || "LOCAL_STATE_WRITE_FAILED";
+      throw error;
+    }
+    return body;
   }
 
   function signalKey(signal) {
@@ -162,52 +175,61 @@
   }
 
   async function applyUpdates(updates) {
-    const state = await readLocalState("workbench");
-    if (!state || typeof state !== "object") {
-      return { ok: false, message: "没有找到 Ray Growth OS 本地工作台数据。" };
-    }
-
     const normalizedUpdates = Array.isArray(updates) ? updates : [];
     if (!normalizedUpdates.length) return { ok: true, appliedCount: 0, message: "没有需要回写的新反馈。" };
 
-    state.signals = state.signals || {};
-    let appliedCount = 0;
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const record = await readLocalStateRecord("workbench");
+      const state = record.value;
+      if (!record.exists || !state || typeof state !== "object") {
+        return { ok: false, message: "没有找到 Ray Growth OS 本地工作台数据。" };
+      }
 
-    for (const mode of ["growth", "outbound"]) {
-      const list = Array.isArray(state.signals[mode]) ? state.signals[mode] : [];
-      state.signals[mode] = list.map((signal) => {
-        const update = normalizedUpdates.find((candidate) => matchUpdate(signal, candidate));
-        if (!update) return signal;
+      state.signals = state.signals || {};
+      let appliedCount = 0;
 
-        const next = { ...signal };
-        if (update.replyUrl) {
-          next.replyUrl = update.replyUrl;
-          next.replyUrlAt = update.replyUrlAt || next.replyUrlAt || new Date().toISOString();
-        }
-        if (update.feedback && update.feedback !== "none") {
-          next.feedback = update.feedback;
-          next.feedbackAt = update.feedbackAt || new Date().toISOString();
-          next.feedbackReason = update.feedbackReason || update.reason || "浏览器插件从 X 页面同步。";
-        }
-        if ((!next.processedAction || next.processedAction === "new") && update.replyUrl) {
-          next.status = "replied";
-          next.processedAction = "replied";
-          next.processedAt = update.replyUrlAt || update.feedbackAt || new Date().toISOString();
-        }
-        appliedCount += 1;
-        return next;
-      });
+      for (const mode of ["growth", "outbound"]) {
+        const list = Array.isArray(state.signals[mode]) ? state.signals[mode] : [];
+        state.signals[mode] = list.map((signal) => {
+          const update = normalizedUpdates.find((candidate) => matchUpdate(signal, candidate));
+          if (!update) return signal;
+
+          const next = { ...signal };
+          if (update.replyUrl) {
+            next.replyUrl = update.replyUrl;
+            next.replyUrlAt = update.replyUrlAt || next.replyUrlAt || new Date().toISOString();
+          }
+          if (update.feedback && update.feedback !== "none") {
+            next.feedback = update.feedback;
+            next.feedbackAt = update.feedbackAt || new Date().toISOString();
+            next.feedbackReason = update.feedbackReason || update.reason || "浏览器插件从 X 页面同步。";
+          }
+          if ((!next.processedAction || next.processedAction === "new") && update.replyUrl) {
+            next.status = "replied";
+            next.processedAction = "replied";
+            next.processedAt = update.replyUrlAt || update.feedbackAt || new Date().toISOString();
+          }
+          appliedCount += 1;
+          return next;
+        });
+      }
+
+      try {
+        await writeLocalState("workbench", state, record.updatedAt);
+        window.dispatchEvent(new CustomEvent("ray-growth-os:extension-sync", { detail: { appliedCount } }));
+        return { ok: true, appliedCount, message: `已回写 ${appliedCount} 条反馈到 App。` };
+      } catch (error) {
+        if (error?.code !== "STATE_CONFLICT" || attempt === 5) throw error;
+      }
     }
 
-    await writeLocalState("workbench", state);
-    window.dispatchEvent(new CustomEvent("ray-growth-os:extension-sync", { detail: { appliedCount } }));
-    return { ok: true, appliedCount, message: `已回写 ${appliedCount} 条反馈到 App。` };
+    return { ok: false, message: "工作台更新过于频繁，插件已停止写入以避免覆盖数据。" };
   }
 
   async function notifySourceOpen(url, hints = {}) {
     const normalizedUrl = normalizeUrl(url);
     if (!isXStatusUrl(normalizedUrl)) return;
-    const { queue } = await readQueue();
+    const { queue, selfUsername } = await readQueue();
     const item = queue.find((candidate) => sameStatusUrl(candidate.sourceUrl || candidate.url, normalizedUrl));
     if (!item) return;
     const usedDraft = clean(hints.usedDraft) || clean(item.usedDraft);
@@ -216,6 +238,7 @@
         type: "RAY_APP_SOURCE_OPENED",
         item: { ...item, usedDraft, sourceUrl: item.sourceUrl || item.url, url: item.url || item.sourceUrl },
         url: normalizedUrl,
+        selfUsername,
       });
     } catch {
       // Extension was reloaded while the app page stayed open.
@@ -234,12 +257,6 @@
   );
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === "RAY_READ_WORKBENCH") {
-      readQueue()
-        .then(sendResponse)
-        .catch((error) => sendResponse({ ok: false, queue: [], message: error?.message || "无法读取本地工作台。" }));
-      return true;
-    }
     if (message?.type === "RAY_APPLY_FEEDBACK_UPDATES") {
       applyUpdates(message.updates)
         .then(sendResponse)

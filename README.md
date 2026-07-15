@@ -10,6 +10,16 @@ An open-source, local-first AI growth workbench for turning public X discussions
 
 > Status: local MVP. It is designed for individual builders and small teams validating a workflow, not as a hosted CRM or an autonomous outreach bot.
 
+## Project Sponsor
+
+<a href="https://codeproxy.dev/register?aff=KTYG4RK7">
+  <img src="docs/codeproxy-sponsor.png" alt="CodeProxy" width="900">
+</a>
+
+[CodeProxy](https://codeproxy.dev/register?aff=KTYG4RK7) provides subscription services for OpenClaw, Hermes Agent, Codex, and Claude Code users.
+
+Register with invitation code `KTYG4RK7` to receive a **US$2 trial credit** and a **one-day subscription plan**, issued automatically.
+
 ## What it does
 
 ```text
@@ -68,6 +78,8 @@ Open **Settings** in the app to configure:
 
 Settings and new workbench data are stored in a local SQLite database, so browsers on the same computer and port share one copy. On the first upgrade, the app migrates only the existing Grok, AI, and X profile settings from the current browser. It deliberately does not migrate legacy positioning, queues, scores, drafts, feedback, or growth memory, giving existing users a clean workbench for retesting.
 
+Workbench writes use revision checks instead of last-write-wins replacement. Concurrent tabs and extension updates are merged before retrying, unchanged page loads do not rewrite the database, and SQLite keeps the previous 100 workbench revisions as local recovery history.
+
 The database is stored at `%LOCALAPPDATA%\RayGrowthOS\ray-growth-os.db` on Windows, `~/Library/Application Support/RayGrowthOS/ray-growth-os.db` on macOS, and `$XDG_DATA_HOME/ray-growth-os/ray-growth-os.db` (or `~/.local/share/ray-growth-os/`) on Linux. Set `RAY_GROWTH_OS_DATA_DIR` to override the directory.
 
 This remains a local single-user security model: API keys are stored locally and are excluded from workbench JSON backups, but they are not protected by a hosted secret manager. Move keys to server-side secret management before deploying the app for multiple users.
@@ -97,7 +109,7 @@ The bundled **Ray Growth OS X Helper** closes the feedback loop after a human ha
 
 ### What it does
 
-1. Reads the local engagement queue from an open workbench tab.
+1. Automatically reads and associates the current engagement item when you open its source post from the workbench.
 2. Associates an X source post with the reply you send yourself.
 3. Saves the public URL of that reply when it is visible on the X page.
 4. Checks public interaction outcomes and writes the result back to the local workbench.
@@ -114,14 +126,14 @@ It does **not** publish replies, read DMs, bypass login, or call the paid X API.
 
 ### Use it
 
-1. Open the extension popup and save your X handle (the part after `@`), or configure your public X profile in the app.
-2. Click **Read queue from App** in the popup.
-3. Open a source post from the workbench and reply on X yourself.
+1. Configure your public X profile in the app, or save your X handle once in the extension popup. The popup does not need to stay open.
+2. Choose **Copy reply and open source post** in the workbench. The extension reads and associates that item automatically; no manual queue sync is needed.
+3. Reply on X yourself.
 4. Once the reply is visible in the source conversation, the extension writes it back automatically. If capture is missed, use **Recover reply on current page and write back**.
 5. Use **Inspect recorded reply links** only after the reply URL has been saved, to check later public feedback.
 
 The inspection action cannot recover a reply URL that was never captured. After extension code changes, reload the unpacked extension at `chrome://extensions/` and refresh existing App/X tabs.
-5. Keep the workbench tab open and use **Write pending feedback to App** if an update was stored while the app was unavailable.
+Keep the workbench tab open and use **Write pending feedback to App** if an update was stored while the app was unavailable.
 
 The extension relies on public X page DOM and may need maintenance after X UI changes. For its Chinese, implementation-focused notes, see [the extension README](extension/ray-growth-os-x-helper/README.md).
 

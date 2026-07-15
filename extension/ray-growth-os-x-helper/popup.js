@@ -47,6 +47,13 @@ async function refreshState() {
   $("#pendingCount").textContent = state?.pendingCount ?? 0;
   $("#updateCount").textContent = state?.updateCount ?? 0;
   if (state?.selfUsername) $("#handle").value = state.selfUsername;
+  const automation = $("#automation");
+  const ready = Boolean(state?.selfUsername);
+  automation.dataset.state = ready ? "ready" : "setup";
+  $("#automationTitle").textContent = ready ? "自动监听已开启" : "还差一步：设置 X 用户名";
+  $("#automationText").textContent = ready
+    ? "正常使用无需操作插件。直接从 App 打开原帖并回复即可。"
+    : "在 App 设置里保存 X 主页，或在上方填写用户名后保存。只需设置一次。";
   scheduleProgressPolling(renderProgress(state?.replyScanProgress));
 }
 
@@ -64,10 +71,6 @@ async function runAction(label, action) {
 
 $("#saveHandle").addEventListener("click", () => {
   void runAction("保存用户名", () => send({ type: "POPUP_SET_SELF_USERNAME", username: $("#handle").value }));
-});
-
-$("#syncApp").addEventListener("click", () => {
-  void runAction("读取 App 队列", () => send({ type: "POPUP_SYNC_APP" }));
 });
 
 $("#scanX").addEventListener("click", () => {

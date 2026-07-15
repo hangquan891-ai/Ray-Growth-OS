@@ -30,6 +30,7 @@ import {
   Trash2,
   Users,
   Upload,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -46,11 +47,11 @@ import { buildGrokSearchPrompt } from "@/lib/grok-utils";
 import { AI_DRAFT_LIMIT, applyAiDraftOverrides, buildDraftRequestInput } from "@/lib/llm-drafts";
 import { applyGrowthMemoryToQueueItems, buildGrowthMemoryPromptContext, buildGrowthMemoryRequestInput, growthMemoryKeywordText, normalizeGrowthMemoryState } from "@/lib/growth-memory";
 import { AI_SCORE_LIMIT, applyAiScoreOverrides, buildScoreRequestInput } from "@/lib/llm-scoring";
-import { loadSharedSettings, readLocalState, writeLocalState } from "@/lib/local-state-client";
+import { LocalStateConflictError, loadSharedSettings, readLocalState, writeLocalState } from "@/lib/local-state-client";
 import { runGrowthWorkflow } from "@/lib/outbound";
 import { PROFILE_MAX_RETRIES, isRetryableProfileFailure, profileRetryDelayMs } from "@/lib/profile-retry";
 import { buildFeedbackLearningPack, createSignal, formatSignalsAsLeadInput, mergeSignals, parseSignalsFromText, signalDedupKey } from "@/lib/signals";
-import { CURRENT_VERSION, DEFAULT_AI_DRAFT_STATE, DEFAULT_AI_SCORE_STATE, DEFAULT_GROK_BRIDGE_STATE, DEFAULT_GROWTH_MEMORY_STATE, DEFAULT_SIGNAL_STATE, DEFAULT_WORKBENCH_STATE, createOperationalWorkbenchSnapshot, createWorkbenchBackup, parseStoredWorkbenchState, parseWorkbenchBackup, serializeWorkbenchState } from "@/lib/workbench-state";
+import { CURRENT_VERSION, DEFAULT_AI_DRAFT_STATE, DEFAULT_AI_SCORE_STATE, DEFAULT_GROK_BRIDGE_STATE, DEFAULT_GROWTH_MEMORY_STATE, DEFAULT_ONBOARDING_STATE, DEFAULT_SIGNAL_STATE, DEFAULT_WORKBENCH_STATE, createOperationalWorkbenchSnapshot, createWorkbenchBackup, mergeConcurrentWorkbenchState, parseStoredWorkbenchState, parseWorkbenchBackup, serializeWorkbenchState } from "@/lib/workbench-state";
 import { cn } from "@/lib/utils";
 
 type Mode = "outbound" | "growth";
@@ -93,6 +94,23 @@ type BusyOverlayState = {
   message: string;
   detail: string;
 } | null;
+
+type OnboardingState = {
+  startedAt: string;
+  welcomeDismissedAt: string;
+};
+
+type OnboardingTarget = "positioning" | "discovery" | "queue";
+type OnboardingTaskKey = "positioning" | "discovery" | "scoring" | "engagement";
+
+type OnboardingTask = {
+  key: OnboardingTaskKey;
+  title: string;
+  description: string;
+  tab: DashboardTab;
+  target: OnboardingTarget;
+  complete: boolean;
+};
 
 function loadAiResponseConfig() {
   if (typeof window === "undefined") return normalizeAiResponseConfig({}) as AiResponseConfig;
@@ -1022,6 +1040,7 @@ function unifyRestoredWorkbenchState(restored: unknown) {
     aiScores: AiScoreState;
     aiDrafts: AiDraftState;
     growthMemory: GrowthMemoryState;
+    onboarding: OnboardingState;
   }>;
   const sourceMode: Mode = source.mode === "outbound" ? "outbound" : "growth";
   const forms = migrateStoredForms((source.forms ?? initialState) as Record<Mode, FormState>);
@@ -1052,6 +1071,7 @@ function unifyRestoredWorkbenchState(restored: unknown) {
     aiScores: { ...restoredScores, growth: unifiedScores } as AiScoreState,
     aiDrafts: { ...restoredDrafts, growth: unifiedDrafts } as AiDraftState,
     growthMemory: (source.growthMemory ?? DEFAULT_GROWTH_MEMORY_STATE) as GrowthMemoryState,
+    onboarding: (source.onboarding ?? DEFAULT_ONBOARDING_STATE) as OnboardingState,
   };
 }
 
@@ -1089,18 +1109,88 @@ export default function Home() {
   const [aiScores, setAiScores] = useState<AiScoreState>(DEFAULT_AI_SCORE_STATE as AiScoreState);
   const [aiDrafts, setAiDrafts] = useState<AiDraftState>(DEFAULT_AI_DRAFT_STATE as AiDraftState);
   const [growthMemory, setGrowthMemory] = useState<GrowthMemoryState>(DEFAULT_GROWTH_MEMORY_STATE as GrowthMemoryState);
+  const [onboarding, setOnboarding] = useState<OnboardingState>(DEFAULT_ONBOARDING_STATE as OnboardingState);
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
+  const [showOnboardingTasks, setShowOnboardingTasks] = useState(false);
+  const [highlightedOnboardingTarget, setHighlightedOnboardingTarget] = useState<OnboardingTarget | null>(null);
+  const [savedPositioningVersion, setSavedPositioningVersion] = useState(0);
   const [isWorkbenchReady, setIsWorkbenchReady] = useState(false);
   const [canPersistWorkbench, setCanPersistWorkbench] = useState(false);
   const [busyOverlay, setBusyOverlay] = useState<BusyOverlayState>(null);
   const savedPositioningFormsRef = useRef<Record<Mode, FormState>>(DEFAULT_WORKBENCH_STATE.forms as Record<Mode, FormState>);
   const workbenchWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const workbenchRevisionRef = useRef<string | null>(null);
+  const lastPersistedWorkbenchRef = useRef(serializeWorkbenchState(DEFAULT_WORKBENCH_STATE));
   const autoSaveErrorShownRef = useRef(false);
+  const onboardingHighlightTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedTab = params.get("tab") as DashboardTab | null;
+    if (requestedTab && ["overview", "search", "engage", "account"].includes(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+    if (params.get("guide") === "1") {
+      setShowOnboardingTasks(true);
+    }
+  }, []);
 
   const persistWorkbenchSnapshot = useCallback(async (value: object) => {
     const nextWrite = workbenchWriteQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        await writeLocalState("workbench", value);
+        const localSerialized = serializeWorkbenchState(value);
+        if (localSerialized === lastPersistedWorkbenchRef.current) return;
+        let base = parseStoredWorkbenchState(lastPersistedWorkbenchRef.current, DEFAULT_WORKBENCH_STATE);
+        let candidate = parseStoredWorkbenchState(localSerialized, DEFAULT_WORKBENCH_STATE);
+        let expectedUpdatedAt = workbenchRevisionRef.current;
+        let mergedConcurrentChanges = false;
+
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+          const candidateSerialized = serializeWorkbenchState(candidate);
+          try {
+            const result = await writeLocalState(
+              "workbench",
+              JSON.parse(candidateSerialized) as object,
+              { expectedUpdatedAt }
+            );
+            workbenchRevisionRef.current = result.updatedAt;
+            lastPersistedWorkbenchRef.current = candidateSerialized;
+
+            if (mergedConcurrentChanges) {
+              const unified = unifyRestoredWorkbenchState(candidate);
+              savedPositioningFormsRef.current = unified.forms;
+              setSavedPositioningVersion((currentVersion) => currentVersion + 1);
+              setForms((previous) => ({
+                outbound: { ...previous.outbound, leadInput: unified.forms.outbound.leadInput },
+                growth: { ...previous.growth, leadInput: unified.forms.growth.leadInput },
+              }));
+              setGrokBridge(unified.grokBridge);
+              setSignals(unified.signals);
+              setAiScores(unified.aiScores);
+              setAiDrafts(unified.aiDrafts);
+              setGrowthMemory(unified.growthMemory);
+              setOnboarding(unified.onboarding);
+              showToast("检测到其他页面同时更新，已自动合并双方数据，没有覆盖队列。", "success");
+            }
+            return;
+          } catch (error) {
+            if (!(error instanceof LocalStateConflictError)) throw error;
+            if (attempt === 5) {
+              throw new Error("工作台同时更新过于频繁，已停止写入以避免覆盖数据。请关闭其他页面后重试。");
+            }
+          }
+
+          const latest = await readLocalState<unknown>("workbench");
+          const remote = parseStoredWorkbenchState(
+            latest.exists && latest.value ? JSON.stringify(latest.value) : null,
+            DEFAULT_WORKBENCH_STATE
+          );
+          candidate = mergeConcurrentWorkbenchState(base, candidate, remote);
+          base = remote;
+          expectedUpdatedAt = latest.updatedAt;
+          mergedConcurrentChanges = true;
+        }
       });
     workbenchWriteQueueRef.current = nextWrite;
     await nextWrite;
@@ -1122,13 +1212,17 @@ export default function Home() {
         );
         const unified = unifyRestoredWorkbenchState(restored);
         if (cancelled) return;
+        workbenchRevisionRef.current = response.updatedAt;
+        lastPersistedWorkbenchRef.current = serializeWorkbenchState(restored);
         savedPositioningFormsRef.current = unified.forms;
+        setSavedPositioningVersion((value) => value + 1);
         setForms(unified.forms);
         setGrokBridge(unified.grokBridge);
         setSignals(unified.signals);
         setAiScores(unified.aiScores);
         setAiDrafts(unified.aiDrafts);
         setGrowthMemory(unified.growthMemory);
+        setOnboarding(unified.onboarding);
         setCanPersistWorkbench(true);
       } catch {
         if (!cancelled) {
@@ -1153,6 +1247,8 @@ export default function Home() {
         if (!response.exists || !response.value) return;
         const restored = parseStoredWorkbenchState(JSON.stringify(response.value), DEFAULT_WORKBENCH_STATE);
         const unified = unifyRestoredWorkbenchState(restored);
+        workbenchRevisionRef.current = response.updatedAt;
+        lastPersistedWorkbenchRef.current = serializeWorkbenchState(restored);
         setForms((previous) => ({
           outbound: { ...previous.outbound, leadInput: unified.forms.outbound.leadInput },
           growth: { ...previous.growth, leadInput: unified.forms.growth.leadInput },
@@ -1162,6 +1258,7 @@ export default function Home() {
         setAiScores(unified.aiScores);
         setAiDrafts(unified.aiDrafts);
         setGrowthMemory(unified.growthMemory);
+        setOnboarding(unified.onboarding);
         showToast("插件同步的反馈已更新到页面。", "success");
       } catch {
         showToast("插件反馈已收到，但页面重新读取本地数据失败。", "error");
@@ -1177,10 +1274,12 @@ export default function Home() {
     if (!isWorkbenchReady || !canPersistWorkbench) return;
 
     const operationalSnapshot = createOperationalWorkbenchSnapshot(
-      { mode, forms, grokBridge, signals, aiScores, aiDrafts, growthMemory },
+      { mode, forms, grokBridge, signals, aiScores, aiDrafts, growthMemory, onboarding },
       savedPositioningFormsRef.current
     );
-    const value = JSON.parse(serializeWorkbenchState(operationalSnapshot)) as object;
+    const serialized = serializeWorkbenchState(operationalSnapshot);
+    if (serialized === lastPersistedWorkbenchRef.current) return;
+    const value = JSON.parse(serialized) as object;
 
     void persistWorkbenchSnapshot(value)
       .then(() => {
@@ -1201,12 +1300,125 @@ export default function Home() {
     growthMemory,
     isWorkbenchReady,
     mode,
+    onboarding,
     persistWorkbenchSnapshot,
     signals,
   ]);
 
   const current = forms[mode];
   const copy = modeCopy[mode];
+  const savedPositioning = useMemo(() => {
+    void savedPositioningVersion;
+    return savedPositioningFormsRef.current[mode];
+  }, [mode, savedPositioningVersion]);
+  const savedPositioningHasContent = ["productName", "description", "targetCustomer", "painPoints"].some((field) =>
+    String(savedPositioning[field as keyof FormState] ?? "").trim()
+  );
+  const positioningTaskComplete = ["productName", "description", "targetCustomer", "painPoints"].every((field) =>
+    String(savedPositioning[field as keyof FormState] ?? "").trim()
+  );
+  const discoveryTaskComplete = (signals[mode] ?? []).length > 0;
+  const scoringTaskComplete = Object.keys(aiScores[mode] ?? {}).length > 0;
+  const engagementTaskComplete = (signals[mode] ?? []).some((signal) => {
+    const status = normalizeExecutionStatus(signal.status);
+    return Boolean(signal.replyUrl) || status === "replied" || status === "quoted";
+  });
+  const hasMeaningfulUsage = savedPositioningHasContent
+    || discoveryTaskComplete
+    || scoringTaskComplete
+    || Object.keys(aiDrafts[mode] ?? {}).length > 0
+    || Boolean(growthMemory.generatedAt);
+  const onboardingTasks = useMemo<OnboardingTask[]>(() => {
+    const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
+    return [
+      {
+        key: "positioning",
+        title: tr("完善账号定位", "Complete account positioning"),
+        description: tr("填写账号、目标用户和能解决的问题，并保存。", "Define the account, target audience, and problems you can solve, then save."),
+        tab: "search",
+        target: "positioning",
+        complete: positioningTaskComplete,
+      },
+      {
+        key: "discovery",
+        title: tr("找到目标讨论", "Discover target discussions"),
+        description: tr("手动或自动搜索，并至少导入 1 条真实 X 讨论。", "Search manually or automatically and import at least one real X discussion."),
+        tab: "search",
+        target: "discovery",
+        complete: discoveryTaskComplete,
+      },
+      {
+        key: "scoring",
+        title: tr("筛出高价值机会", "Prioritize high-value opportunities"),
+        description: tr("在互动队列完成一次 AI 评分。", "Run AI scoring once in the engagement queue."),
+        tab: "engage",
+        target: "queue",
+        complete: scoringTaskComplete,
+      },
+      {
+        key: "engagement",
+        title: tr("完成首次互动", "Complete the first engagement"),
+        description: tr("复制回复并打开来源，回复后记录结果。", "Copy a reply, open the source, and record the result after responding."),
+        tab: "engage",
+        target: "queue",
+        complete: engagementTaskComplete,
+      },
+    ];
+  }, [discoveryTaskComplete, engagementTaskComplete, locale, positioningTaskComplete, scoringTaskComplete]);
+  const completedOnboardingCount = onboardingTasks.filter((task) => task.complete).length;
+  const onboardingComplete = completedOnboardingCount === onboardingTasks.length;
+  const firstIncompleteOnboardingTask = onboardingTasks.find((task) => !task.complete) ?? onboardingTasks[onboardingTasks.length - 1];
+  const onboardingQuestActive = Boolean(onboarding.startedAt) && !onboardingComplete;
+
+  useEffect(() => {
+    if (!isWorkbenchReady || onboarding.startedAt || onboarding.welcomeDismissedAt || hasMeaningfulUsage) return;
+    setShowWelcomeGuide(true);
+  }, [hasMeaningfulUsage, isWorkbenchReady, onboarding.startedAt, onboarding.welcomeDismissedAt]);
+
+  useEffect(() => () => {
+    if (onboardingHighlightTimerRef.current) window.clearTimeout(onboardingHighlightTimerRef.current);
+  }, []);
+
+  function ensureOnboardingStarted() {
+    setOnboarding((previous) => {
+      if (previous.startedAt && previous.welcomeDismissedAt) return previous;
+      const now = new Date().toISOString();
+      return {
+        startedAt: previous.startedAt || now,
+        welcomeDismissedAt: previous.welcomeDismissedAt || now,
+      };
+    });
+  }
+
+  function navigateToOnboardingTask(task: OnboardingTask) {
+    ensureOnboardingStarted();
+    setShowWelcomeGuide(false);
+    setShowOnboardingTasks(false);
+    setActiveTab(task.tab);
+    setHighlightedOnboardingTarget(task.target);
+
+    window.setTimeout(() => {
+      document.querySelector(`[data-onboarding-target="${task.target}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+
+    if (onboardingHighlightTimerRef.current) window.clearTimeout(onboardingHighlightTimerRef.current);
+    onboardingHighlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedOnboardingTarget(null);
+      onboardingHighlightTimerRef.current = null;
+    }, 5000);
+  }
+
+  function dismissWelcomeGuide(startFirstTask: boolean) {
+    ensureOnboardingStarted();
+    setShowWelcomeGuide(false);
+    if (startFirstTask) navigateToOnboardingTask(firstIncompleteOnboardingTask);
+  }
+
+  function openOnboardingTasks() {
+    ensureOnboardingStarted();
+    setShowOnboardingTasks(true);
+  }
+
   const workflowLeadInput = useMemo(
     () => mergeLeadInputWithSignals(current.leadInput, signals[mode] ?? []),
     [current.leadInput, mode, signals]
@@ -1315,6 +1527,7 @@ export default function Home() {
 
     try {
       savedPositioningFormsRef.current = forms;
+      setSavedPositioningVersion((value) => value + 1);
       const value = JSON.parse(
         serializeWorkbenchState({
           mode,
@@ -1324,6 +1537,7 @@ export default function Home() {
           aiScores,
           aiDrafts,
           growthMemory,
+          onboarding,
         })
       ) as object;
       await persistWorkbenchSnapshot(value);
@@ -1973,7 +2187,7 @@ export default function Home() {
     );
   }
   function exportWorkbenchBackup() {
-    const backup = createWorkbenchBackup({ mode, forms, grokBridge, signals, aiScores, aiDrafts, growthMemory });
+    const backup = createWorkbenchBackup({ mode, forms, grokBridge, signals, aiScores, aiDrafts, growthMemory, onboarding });
     downloadTextFile(backup.filename, backup.json, "application/json;charset=utf-8");
   }
 
@@ -1987,6 +2201,7 @@ export default function Home() {
       aiScores: DEFAULT_AI_SCORE_STATE,
       aiDrafts: DEFAULT_AI_DRAFT_STATE,
       growthMemory: DEFAULT_GROWTH_MEMORY_STATE,
+      onboarding: DEFAULT_ONBOARDING_STATE,
     });
 
     if (!restored.ok || !restored.state) {
@@ -1995,12 +2210,14 @@ export default function Home() {
 
     const unified = unifyRestoredWorkbenchState(restored.state);
     savedPositioningFormsRef.current = unified.forms;
+    setSavedPositioningVersion((value) => value + 1);
     setForms(unified.forms);
     setGrokBridge(unified.grokBridge);
     setSignals(unified.signals);
     setAiScores(unified.aiScores);
     setAiDrafts(unified.aiDrafts);
     setGrowthMemory(unified.growthMemory);
+    setOnboarding(unified.onboarding);
     const value = JSON.parse(
       serializeWorkbenchState({
         mode,
@@ -2010,6 +2227,7 @@ export default function Home() {
         aiScores: unified.aiScores,
         aiDrafts: unified.aiDrafts,
         growthMemory: unified.growthMemory,
+        onboarding: unified.onboarding,
       })
     ) as object;
     void persistWorkbenchSnapshot(value).catch(() => {
@@ -2021,6 +2239,24 @@ export default function Home() {
     <main className="tech-shell surface-grid relative flex h-screen overflow-hidden text-foreground">
       <ActionToastHost />
       {busyOverlay ? <LongTaskOverlay title={busyOverlay.title} message={busyOverlay.message} detail={busyOverlay.detail} /> : null}
+      {showWelcomeGuide ? (
+        <WelcomeOnboardingModal
+          onClose={() => dismissWelcomeGuide(false)}
+          onStart={() => dismissWelcomeGuide(true)}
+        />
+      ) : null}
+      {showOnboardingTasks ? (
+        <OnboardingTaskPanel
+          tasks={onboardingTasks}
+          completedCount={completedOnboardingCount}
+          onClose={() => setShowOnboardingTasks(false)}
+          onOpenWelcome={() => {
+            setShowOnboardingTasks(false);
+            setShowWelcomeGuide(true);
+          }}
+          onSelectTask={navigateToOnboardingTask}
+        />
+      ) : null}
       <DashboardSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
@@ -2028,10 +2264,22 @@ export default function Home() {
           activeTab={activeTab}
           urgentCount={hotCount}
           downloadCsv={downloadCsv}
+          completedOnboardingCount={completedOnboardingCount}
+          onboardingTaskCount={onboardingTasks.length}
+          onboardingQuestActive={onboardingQuestActive}
+          onOpenGuide={openOnboardingTasks}
         />
 
         <section key={activeTab} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24 md:px-6 md:pb-6 lg:px-8">
           <div className="mx-auto grid max-w-[1480px] animate-fade-in-up gap-4">
+            {onboardingQuestActive ? (
+              <OnboardingQuestBanner
+                completedCount={completedOnboardingCount}
+                task={firstIncompleteOnboardingTask}
+                onContinue={() => navigateToOnboardingTask(firstIncompleteOnboardingTask)}
+                onOpenTasks={openOnboardingTasks}
+              />
+            ) : null}
             {activeTab === "overview" ? (
               <OverviewTab mode={mode} copy={copy} result={result} topItem={topItem} averageScore={averageScore} hotCount={hotCount} setActiveTab={setActiveTab} />
             ) : null}
@@ -2051,6 +2299,7 @@ export default function Home() {
                 exportBackup={exportWorkbenchBackup}
                 restoreBackupText={restoreWorkbenchBackupText}
                 growthMemory={growthMemory}
+                highlightedTarget={highlightedOnboardingTarget}
               />
             ) : null}
 
@@ -2069,31 +2318,37 @@ export default function Home() {
             ) : null}
 
             {activeTab === "engage" ? (
-              <EngageTab
-                mode={mode}
-                result={result}
-                signalByKey={signalByKey}
-                onUpdateSignalStatus={updateSignalStatus}
-                onBatchUpdateSignalStatus={updateSignalStatuses}
-                onUpdateSignalFeedback={updateSignalFeedback}
-                onUpdateSignalUsedDraft={updateSignalUsedDraft}
-                onDeleteItems={deleteSignalItems}
-                ownAccountIdentity={ownAccountIdentity}
-                copyAllDrafts={copyAllDrafts}
-                aiScoreCount={Object.keys(aiScores[mode]).length}
-                aiDraftCount={Object.keys(aiDrafts[mode]).length}
-                styleSampleCount={(signals[mode] ?? []).filter((signal) => ["got_reply", "followed", "reshared"].includes(normalizeFeedbackStatus(signal.feedback)) && Boolean(signal.usedDraft)).length}
-                runAiScoring={runAiScoring}
-                runAiDrafting={runAiDrafting}
-                runGrowthMemoryLearning={runGrowthMemoryLearning}
-                applyGrowthMemory={applyGrowthMemory}
-                pauseGrowthMemory={pauseGrowthMemory}
-                clearGrowthMemory={clearGrowthMemory}
-                growthMemory={growthMemory}
-                executionStats={executionStats}
-                recentProcessedSignals={recentProcessedSignals}
-                signals={signals[mode] ?? []}
-              />
+              <div
+                data-onboarding-target="queue"
+                className={cn("relative scroll-mt-24 rounded-lg", highlightedOnboardingTarget === "queue" && "onboarding-target-active")}
+              >
+                {highlightedOnboardingTarget === "queue" ? <OnboardingTargetMarker /> : null}
+                <EngageTab
+                  mode={mode}
+                  result={result}
+                  signalByKey={signalByKey}
+                  onUpdateSignalStatus={updateSignalStatus}
+                  onBatchUpdateSignalStatus={updateSignalStatuses}
+                  onUpdateSignalFeedback={updateSignalFeedback}
+                  onUpdateSignalUsedDraft={updateSignalUsedDraft}
+                  onDeleteItems={deleteSignalItems}
+                  ownAccountIdentity={ownAccountIdentity}
+                  copyAllDrafts={copyAllDrafts}
+                  aiScoreCount={Object.keys(aiScores[mode]).length}
+                  aiDraftCount={Object.keys(aiDrafts[mode]).length}
+                  styleSampleCount={(signals[mode] ?? []).filter((signal) => ["got_reply", "followed", "reshared"].includes(normalizeFeedbackStatus(signal.feedback)) && Boolean(signal.usedDraft)).length}
+                  runAiScoring={runAiScoring}
+                  runAiDrafting={runAiDrafting}
+                  runGrowthMemoryLearning={runGrowthMemoryLearning}
+                  applyGrowthMemory={applyGrowthMemory}
+                  pauseGrowthMemory={pauseGrowthMemory}
+                  clearGrowthMemory={clearGrowthMemory}
+                  growthMemory={growthMemory}
+                  executionStats={executionStats}
+                  recentProcessedSignals={recentProcessedSignals}
+                  signals={signals[mode] ?? []}
+                />
+              </div>
             ) : null}
 
 
@@ -2130,15 +2385,26 @@ function DashboardSidebar({ activeTab, setActiveTab }: { activeTab: DashboardTab
           ))}
         </div>
       </nav>
-      <Link
-        href="/settings"
-        aria-label={t("settings")}
-        title={t("settings")}
-        className="mt-auto mb-4 flex h-11 w-10 items-center justify-center gap-3 overflow-hidden rounded-lg border border-blue-300/25 bg-blue-400/12 px-0 text-blue-100 shadow-lg shadow-blue-500/10 transition-all duration-200 hover:scale-105 hover:border-blue-200/45 hover:bg-blue-400/20 hover:text-white active:scale-95 group-hover/sidebar:w-36 group-hover/sidebar:justify-start group-hover/sidebar:px-3 [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125 active:[&_svg]:scale-110"
-      >
-        <Settings className="h-5 w-5" />
-        <span className="hidden min-w-0 truncate text-sm font-bold opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">{t("settings")}</span>
-      </Link>
+      <div className="mt-auto mb-4 grid gap-2">
+        <Link
+          href="/help"
+          aria-label={locale === "en" ? "Help" : "帮助"}
+          title={locale === "en" ? "Help" : "帮助"}
+          className="flex h-10 w-10 items-center justify-center gap-3 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.025] px-0 text-white/50 transition-all duration-200 hover:scale-105 hover:border-white/[0.16] hover:bg-white/[0.06] hover:text-white active:scale-95 group-hover/sidebar:w-36 group-hover/sidebar:justify-start group-hover/sidebar:px-3 [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125 active:[&_svg]:scale-110"
+        >
+          <CircleHelp className="h-5 w-5" />
+          <span className="hidden min-w-0 truncate text-sm font-bold opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">{locale === "en" ? "Help" : "帮助"}</span>
+        </Link>
+        <Link
+          href="/settings"
+          aria-label={t("settings")}
+          title={t("settings")}
+          className="flex h-11 w-10 items-center justify-center gap-3 overflow-hidden rounded-lg border border-blue-300/25 bg-blue-400/12 px-0 text-blue-100 shadow-lg shadow-blue-500/10 transition-all duration-200 hover:scale-105 hover:border-blue-200/45 hover:bg-blue-400/20 hover:text-white active:scale-95 group-hover/sidebar:w-36 group-hover/sidebar:justify-start group-hover/sidebar:px-3 [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125 active:[&_svg]:scale-110"
+        >
+          <Settings className="h-5 w-5" />
+          <span className="hidden min-w-0 truncate text-sm font-bold opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">{t("settings")}</span>
+        </Link>
+      </div>
     </aside>
   );
 }
@@ -2174,7 +2440,7 @@ function MobileDashboardNav({ activeTab, setActiveTab }: { activeTab: DashboardT
   const { locale } = useI18n();
   const tabs = localizedDashboardTabs(locale);
   return (
-    <nav className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-4 rounded-lg border border-white/[0.08] bg-[#08090d]/90 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl md:hidden">
+    <nav className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 rounded-lg border border-white/[0.08] bg-[#08090d]/90 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl md:hidden">
       {tabs.map((tab) => (
         <button
           key={tab.value}
@@ -2187,6 +2453,14 @@ function MobileDashboardNav({ activeTab, setActiveTab }: { activeTab: DashboardT
           <span className="mt-1 leading-none">{tab.shortLabel}</span>
         </button>
       ))}
+      <Link
+        href="/help"
+        className="grid h-[3.25rem] place-items-center rounded-md px-1 text-[10px] font-semibold text-white/45 transition-all duration-200"
+        aria-label={locale === "en" ? "Help" : "帮助"}
+      >
+        <CircleHelp className="h-5 w-5" />
+        <span className="mt-1 leading-none">{locale === "en" ? "Help" : "帮助"}</span>
+      </Link>
     </nav>
   );
 }
@@ -2195,12 +2469,21 @@ function DashboardTopbar({
   activeTab,
   urgentCount,
   downloadCsv,
+  completedOnboardingCount,
+  onboardingTaskCount,
+  onboardingQuestActive,
+  onOpenGuide,
 }: {
   activeTab: DashboardTab;
   urgentCount: number;
   downloadCsv: () => void;
+  completedOnboardingCount: number;
+  onboardingTaskCount: number;
+  onboardingQuestActive: boolean;
+  onOpenGuide: () => void;
 }) {
   const { locale, t } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   return (
     <header className="relative z-20 flex h-auto shrink-0 flex-col gap-3 border-b border-white/[0.07] bg-[#08090d]/90 px-4 py-3 backdrop-blur-xl md:h-16 md:flex-row md:items-center md:justify-between md:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-3">
@@ -2217,6 +2500,24 @@ function DashboardTopbar({
       </div>
 
       <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+        <Button
+          type="button"
+          size="sm"
+          onClick={onOpenGuide}
+          className={cn("h-9", onboardingQuestActive ? "tech-cta" : "tech-secondary")}
+        >
+          <CircleHelp className="h-4 w-4" />
+          <span className="sm:hidden">
+            {onboardingQuestActive
+              ? tr(`新手 ${completedOnboardingCount}/${onboardingTaskCount}`, `Start ${completedOnboardingCount}/${onboardingTaskCount}`)
+              : tr("指南", "Guide")}
+          </span>
+          <span className="hidden sm:inline">
+            {onboardingQuestActive
+              ? tr(`新手任务 ${completedOnboardingCount}/${onboardingTaskCount}`, `Getting started ${completedOnboardingCount}/${onboardingTaskCount}`)
+              : tr("使用指南", "Guide")}
+          </span>
+        </Button>
         <Badge variant="outline" className="h-9 rounded-lg border-blue-300/15 bg-blue-400/10 px-3 text-blue-100">
           <Radar className="mr-1.5 h-3.5 w-3.5" /> {t("growthOpportunities")}
         </Badge>
@@ -2229,6 +2530,210 @@ function DashboardTopbar({
         </Badge>
       </div>
     </header>
+  );
+}
+
+function WelcomeOnboardingModal({ onClose, onStart }: { onClose: () => void; onStart: () => void }) {
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
+  const pages = [
+    {
+      title: tr("总览", "Overview"),
+      description: tr("看清增长闭环、当前进度和下一步动作。", "See the growth loop, current progress, and next action."),
+      icon: <HomeIcon className="h-5 w-5" />,
+    },
+    {
+      title: tr("定位找人", "Find people"),
+      description: tr("完善账号定位，再发现值得互动的潜在客户。", "Define positioning, then discover potential customers worth engaging."),
+      icon: <Search className="h-5 w-5" />,
+    },
+    {
+      title: tr("互动队列", "Engagement queue"),
+      description: tr("给机会排序、生成草稿并记录回复结果。", "Prioritize opportunities, draft replies, and record outcomes."),
+      icon: <MessageSquareText className="h-5 w-5" />,
+    },
+    {
+      title: tr("竞品洞察", "Competitor insights"),
+      description: tr("从竞品、KOL 或社区受众中补充机会，可选使用。", "Find extra opportunities around competitors, KOLs, or communities. Optional."),
+      icon: <Radar className="h-5 w-5" />,
+    },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[90] grid items-start justify-items-center overflow-y-auto bg-black/75 p-4 backdrop-blur-md sm:place-items-center" role="dialog" aria-modal="true" aria-labelledby="welcome-guide-title">
+      <div className="relative w-full max-w-3xl overflow-hidden rounded-xl border border-blue-300/20 bg-[#0b0d12] text-white shadow-2xl shadow-black/60">
+        <button type="button" onClick={onClose} aria-label={tr("关闭介绍", "Close introduction")} className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white">
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="border-b border-white/[0.08] bg-blue-400/[0.06] px-5 py-6 sm:px-8 sm:py-8">
+          <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">
+            <Trophy className="mr-1 h-3.5 w-3.5" /> {tr("首次使用", "First run")}
+          </Badge>
+          <h2 id="welcome-guide-title" className="mt-4 max-w-2xl text-2xl font-black leading-tight sm:text-4xl">
+            {tr("先用 30 秒认识 Ray Growth OS", "Meet Ray Growth OS in 30 seconds")}
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-white/60 sm:text-base">
+            {tr("它会把 X 上的公开讨论整理成值得行动的机会：先找对人，再判断优先级，最后完成回复并记录结果。", "It turns public X discussions into actionable opportunities: find the right people, prioritize them, then reply and record the outcome.")}
+          </p>
+        </div>
+
+        <div className="grid gap-5 p-5 sm:p-8">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {pages.map((page) => (
+              <div key={page.title} className="flex gap-3 rounded-lg border border-white/[0.07] bg-white/[0.025] p-4">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-blue-300/15 bg-blue-400/10 text-blue-100">{page.icon}</span>
+                <div>
+                  <p className="font-bold text-white">{page.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-white/50">{page.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-start gap-3 rounded-lg border border-amber-300/15 bg-amber-400/[0.06] p-4 text-sm leading-6 text-amber-100/75">
+            <Settings className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{tr("需要 AI 搜索、评分或草稿时，再到设置里填写自己的 API 配置；你也可以先走手动流程。", "Add your own API settings when you want AI search, scoring, or drafts. You can start with the manual flow.")}</p>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="tech-secondary" onClick={onClose}>{tr("先自己看看", "Explore first")}</Button>
+            <Button type="button" className="tech-cta" onClick={onStart}>
+              {tr("开始第 1 个任务", "Start the first task")} <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingTaskPanel({
+  tasks,
+  completedCount,
+  onClose,
+  onOpenWelcome,
+  onSelectTask,
+}: {
+  tasks: OnboardingTask[];
+  completedCount: number;
+  onClose: () => void;
+  onOpenWelcome: () => void;
+  onSelectTask: (task: OnboardingTask) => void;
+}) {
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
+  const progress = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
+
+  return (
+    <div className="fixed inset-0 z-[85] flex justify-end" role="dialog" aria-modal="true" aria-labelledby="onboarding-task-title">
+      <button type="button" className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-label={tr("关闭新手任务", "Close getting-started tasks")} />
+      <aside className="relative flex h-full w-full max-w-[430px] flex-col border-l border-white/[0.08] bg-[#090b10] text-white shadow-2xl shadow-black/60">
+        <div className="border-b border-white/[0.08] p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Badge variant="outline" className="rounded-md border-blue-300/15 bg-blue-400/10 text-blue-100">
+                <Trophy className="mr-1 h-3.5 w-3.5" /> {tr("新手任务", "Getting started")}
+              </Badge>
+              <h2 id="onboarding-task-title" className="mt-3 text-2xl font-black">{tr("完成你的第一次增长闭环", "Complete your first growth loop")}</h2>
+              <p className="mt-2 text-sm leading-6 text-white/50">{tr("任务会根据真实操作自动完成，不需要手动打勾。", "Tasks complete automatically from real actions. No manual checkboxes.")}</p>
+            </div>
+            <button type="button" onClick={onClose} aria-label={tr("关闭", "Close")} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between text-xs font-bold text-white/55">
+              <span>{tr("任务进度", "Progress")}</span>
+              <span>{completedCount}/{tasks.length}</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="h-full rounded-full bg-emerald-400 transition-[width] duration-500" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid flex-1 content-start gap-3 overflow-y-auto p-5 sm:p-6">
+          {tasks.map((task, index) => (
+            <button
+              key={task.key}
+              type="button"
+              onClick={() => onSelectTask(task)}
+              className={cn(
+                "group flex gap-3 rounded-lg border p-4 text-left transition-all hover:-translate-y-0.5",
+                task.complete
+                  ? "border-emerald-300/15 bg-emerald-400/[0.06]"
+                  : "border-white/[0.08] bg-white/[0.025] hover:border-blue-300/25 hover:bg-blue-400/[0.05]"
+              )}
+            >
+              <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg border", task.complete ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-300" : "border-white/10 bg-white/[0.04] text-white/40")}>
+                {task.complete ? <CheckCircle2 className="h-5 w-5" /> : <span className="text-sm font-black">{index + 1}</span>}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-white">{task.title}</span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition-transform group-hover:translate-x-1 group-hover:text-blue-200" />
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-white/45">{task.description}</span>
+                <span className={cn("mt-2 block text-[11px] font-bold", task.complete ? "text-emerald-300" : "text-amber-200/80")}>
+                  {task.complete ? tr("已完成", "Completed") : tr("未完成 · 点击前往", "Not completed · Open task")}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="border-t border-white/[0.08] p-5 sm:p-6">
+          <Button type="button" variant="outline" className="tech-secondary w-full" onClick={onOpenWelcome}>
+            <CircleHelp className="h-4 w-4" /> {tr("重看系统介绍", "View system introduction")}
+          </Button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function OnboardingQuestBanner({
+  completedCount,
+  task,
+  onContinue,
+  onOpenTasks,
+}: {
+  completedCount: number;
+  task: OnboardingTask;
+  onContinue: () => void;
+  onOpenTasks: () => void;
+}) {
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-blue-300/20 bg-blue-400/[0.07] p-4 text-white shadow-xl shadow-blue-950/20 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-blue-300/20 bg-blue-400/10 text-blue-100">
+          <CircleHelp className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <p className="font-black text-white">{tr("还不知道先做什么？", "Not sure what to do next?")}</p>
+          <p className="mt-1 text-sm leading-6 text-white/55">
+            {tr(`下一步：${task.title}。先完善定位，再找出值得互动的潜在客户。`, `Next: ${task.title}. Define positioning, then discover potential customers worth engaging.`)}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+        <Button type="button" variant="outline" className="tech-secondary" onClick={onOpenTasks}>{tr(`全部任务 ${completedCount}/4`, `All tasks ${completedCount}/4`)}</Button>
+        <Button type="button" className="tech-cta" onClick={onContinue}>{tr("继续下一步", "Continue")} <ArrowRight className="h-4 w-4" /></Button>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingTargetMarker() {
+  const { locale } = useI18n();
+  return (
+    <div className="pointer-events-none absolute right-3 top-0 z-40 flex -translate-y-1/2 items-center gap-1 rounded-full border border-blue-200/35 bg-blue-500 px-3 py-1.5 text-xs font-black text-white shadow-lg shadow-blue-500/30">
+      <ArrowRight className="h-3.5 w-3.5 rotate-90" /> {locale === "en" ? "Start here" : "从这里开始"}
+    </div>
   );
 }
 
@@ -2380,6 +2885,7 @@ function SearchRadarTab({
   exportBackup,
   restoreBackupText,
   growthMemory,
+  highlightedTarget,
 }: {
   variant?: "search" | "account";
   mode: Mode;
@@ -2395,6 +2901,7 @@ function SearchRadarTab({
   exportBackup: () => void;
   restoreBackupText: (rawText: string) => { ok: boolean; message: string };
   growthMemory: GrowthMemoryState;
+  highlightedTarget: OnboardingTarget | null;
 }) {
   const { locale } = useI18n();
   const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
@@ -2408,7 +2915,13 @@ function SearchRadarTab({
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 xl:grid-cols-[430px_minmax(0,1fr)]">
-        <InputPanel mode={mode} copy={copy} current={current} updateField={updateField} onGenerateProfile={onGenerateProfile} onSaveProfile={onSaveProfile} />
+        <div
+          data-onboarding-target="positioning"
+          className={cn("relative min-w-0 scroll-mt-24 rounded-lg", highlightedTarget === "positioning" && "onboarding-target-active")}
+        >
+          {highlightedTarget === "positioning" ? <OnboardingTargetMarker /> : null}
+          <InputPanel mode={mode} copy={copy} current={current} updateField={updateField} onGenerateProfile={onGenerateProfile} onSaveProfile={onSaveProfile} />
+        </div>
         <div className="grid content-start gap-4">
           <Card className="overflow-hidden border border-white/[0.08] bg-white/[0.03] text-white shadow-2xl shadow-blue-500/5 backdrop-blur-md">
             <CardHeader className="border-b border-white/[0.08] bg-[#0d0d10]/70">
@@ -2426,7 +2939,13 @@ function SearchRadarTab({
             </CardContent>
           </Card>
 
-          <GrokBridgePanel variant="search" mode={mode} current={current} updateField={updateField} grokBridge={grokBridge} setGrokBridge={setGrokBridge} modeSignals={modeSignals} setModeSignals={setModeSignals} growthMemory={growthMemory} />
+          <div
+            data-onboarding-target="discovery"
+            className={cn("relative scroll-mt-24 rounded-lg", highlightedTarget === "discovery" && "onboarding-target-active")}
+          >
+            {highlightedTarget === "discovery" ? <OnboardingTargetMarker /> : null}
+            <GrokBridgePanel variant="search" mode={mode} current={current} updateField={updateField} grokBridge={grokBridge} setGrokBridge={setGrokBridge} modeSignals={modeSignals} setModeSignals={setModeSignals} growthMemory={growthMemory} />
+          </div>
         </div>
       </div>
 
@@ -3990,6 +4509,7 @@ function GrokBridgePanel({
   const [isProxyConfigReady, setIsProxyConfigReady] = useState(false);
   const [proxyConfig, setProxyConfig] = useState<GrokProxyConfig>(() => normalizeGrokProxyConfig({}) as GrokProxyConfig);
   const [proxySearchResult, setProxySearchResult] = useState<GrokProxySearchResult | null>(null);
+  const [resultPreviewPage, setResultPreviewPage] = useState(1);
   const [bridgeDiagnosticId, setBridgeDiagnosticId] = useState<number | null>(null);
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const autoKeywords = useMemo(() => deriveGrokKeywords(current), [current]);
@@ -4097,7 +4617,16 @@ function GrokBridgePanel({
         .slice(0, 4),
     [proxySearchResult]
   );
-  const resultPreviewSignals = useMemo(() => importableGrokCandidates.slice(0, 4), [importableGrokCandidates]);
+  const resultPreviewPageSize = 4;
+  const resultPreviewPageCount = Math.max(1, Math.ceil(importableGrokCandidates.length / resultPreviewPageSize));
+  const safeResultPreviewPage = Math.min(resultPreviewPage, resultPreviewPageCount);
+  const resultPreviewStart = (safeResultPreviewPage - 1) * resultPreviewPageSize;
+  const resultPreviewEnd = Math.min(resultPreviewStart + resultPreviewPageSize, importableGrokCandidates.length);
+  const resultPreviewDisplayStart = importableGrokCandidates.length > 0 ? resultPreviewStart + 1 : 0;
+  const resultPreviewSignals = useMemo(
+    () => importableGrokCandidates.slice(resultPreviewStart, resultPreviewEnd),
+    [importableGrokCandidates, resultPreviewEnd, resultPreviewStart]
+  );
   const pulledProfilePreviewLines = useMemo(
     () =>
       (proxySearchResult?.pulledProfile?.preview ?? "")
@@ -4139,6 +4668,7 @@ function GrokBridgePanel({
 
     setBridgeState("loading");
     setProxySearchResult(null);
+    setResultPreviewPage(1);
     setBridgeDiagnosticId(null);
     setBridgeMessage("正在分析公开 X 账号，围绕它的受众、评论区和相关讨论生成可互动线索。只会处理公开数据，不会读取私信或后台数据。");
 
@@ -4223,6 +4753,7 @@ function GrokBridgePanel({
 
     setBridgeState("loading");
     setProxySearchResult(null);
+    setResultPreviewPage(1);
     setBridgeDiagnosticId(null);
     setBridgeMessage("Grok 查询中，请稍等。正在通过 codeproxy.dev 获取候选信号。");
 
@@ -4319,7 +4850,15 @@ function GrokBridgePanel({
   }
 
   return (
-    <Card className="fade-up delay-4 overflow-hidden border border-white/[0.08] bg-white/[0.03] text-white shadow-2xl shadow-blue-500/5 backdrop-blur-md">
+    <>
+      {isAccountRadar && bridgeState === "loading" ? (
+        <LongTaskOverlay
+          title={tr("AI 正在分析目标账号", "AI is analyzing the target account")}
+          message={tr("正在读取公开资料、比较定位与受众，并生成可互动线索。", "Reading public context, comparing positioning and audience, and generating engagement signals.")}
+          detail={tr("分析完成后结果会显示在当前页面，请稍候。", "The results will appear on this page when the analysis is complete.")}
+        />
+      ) : null}
+      <Card className="fade-up delay-4 overflow-hidden border border-white/[0.08] bg-white/[0.03] text-white shadow-2xl shadow-blue-500/5 backdrop-blur-md">
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 border-b border-white/[0.08] bg-[#0d0d10]/70">
         <div>
           <Badge variant="outline" className="rounded-md border-blue-300/20 bg-blue-400/10 text-blue-100">
@@ -4498,7 +5037,12 @@ function GrokBridgePanel({
                   </Badge>
                 </div>
                 <h3 className="mt-3 text-base font-bold text-white">{isAccountRadar ? "是否导入这批竞品洞察线索？" : "是否导入这批 Grok 结果？"}</h3>
-                <p className="mt-1 text-sm leading-6 text-white/55">模型：{proxySearchResult.model}。已解析 {importPreview.parsedCount} 条，可导入 {importPreview.importableCount} 条，重复 {importPreview.duplicateCount} 条{importPreview.excludedOwnCount ? "，已排除自己账号 " + importPreview.excludedOwnCount + " 条" : ""}。</p>
+                <p className="mt-1 text-sm leading-6 text-white/55">
+                  {tr(
+                    `模型：${proxySearchResult.model}。已解析 ${importPreview.parsedCount} 条，可导入 ${importPreview.importableCount} 条，重复 ${importPreview.duplicateCount} 条${importPreview.excludedOwnCount ? `，已排除自己账号 ${importPreview.excludedOwnCount} 条` : ""}。下方分页展示全部结果，当前 ${resultPreviewDisplayStart}-${resultPreviewEnd} 条。`,
+                    `Model: ${proxySearchResult.model}. Parsed ${importPreview.parsedCount}; ${importPreview.importableCount} importable; ${importPreview.duplicateCount} duplicates${importPreview.excludedOwnCount ? `; ${importPreview.excludedOwnCount} results from your own account excluded` : ""}. Results are paginated below; showing ${resultPreviewDisplayStart}-${resultPreviewEnd}.`
+                  )}
+                </p>
                 {!proxySearchResult.structured && proxySearchResult.parseError ? <p className="mt-1 text-xs text-amber-200/70">JSON 解析未命中，已自动回退到文本解析。</p> : null}
               </div>
               <div className="flex flex-col gap-2 sm:flex-row lg:shrink-0">
@@ -4533,6 +5077,38 @@ function GrokBridgePanel({
                 {resultPreviewLines.map((line, index) => (
                   <p key={`${line}-${index}`} className="line-clamp-2 rounded-md border border-white/[0.06] bg-[#0d0d10]/60 px-3 py-2 text-xs leading-5 text-white/60">{line}</p>
                 ))}
+              </div>
+            ) : null}
+            {importableGrokCandidates.length > resultPreviewPageSize ? (
+              <div className="mt-4 flex flex-col gap-2 border-t border-white/[0.08] pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-white/45">
+                  {tr(
+                    `第 ${safeResultPreviewPage}/${resultPreviewPageCount} 页 · 当前 ${resultPreviewDisplayStart}-${resultPreviewEnd} / 共 ${importableGrokCandidates.length} 条`,
+                    `Page ${safeResultPreviewPage}/${resultPreviewPageCount} · Showing ${resultPreviewDisplayStart}-${resultPreviewEnd} of ${importableGrokCandidates.length}`
+                  )}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="tech-secondary"
+                    disabled={safeResultPreviewPage <= 1}
+                    onClick={() => setResultPreviewPage((page) => Math.max(1, page - 1))}
+                  >
+                    {tr("上一页", "Previous")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="tech-secondary"
+                    disabled={safeResultPreviewPage >= resultPreviewPageCount}
+                    onClick={() => setResultPreviewPage((page) => Math.min(resultPreviewPageCount, page + 1))}
+                  >
+                    {tr("下一页", "Next")}
+                  </Button>
+                </div>
               </div>
             ) : null}
           </div>
@@ -4610,7 +5186,8 @@ function GrokBridgePanel({
           ) : null}
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </>
   );
 }
 function shortValue(value: string | undefined, fallback: string) {
@@ -4723,11 +5300,30 @@ function AccountRadarOpportunityPanel({
   );
 }
 function SignalImportPreview({ preview }: { preview: SignalImportPreviewData }) {
-  const previewItems = preview.importable.slice(0, 3);
-  const duplicateItems = preview.duplicates.slice(0, 3);
-  const excludedOwnItems = preview.excludedOwn.slice(0, 3);
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
+  const [previewPage, setPreviewPage] = useState(1);
   const hasOnlyDuplicates = preview.importableCount === 0 && preview.duplicateCount > 0;
   const hasOnlyOwnAccount = preview.importableCount === 0 && preview.excludedOwnCount > 0 && preview.duplicateCount === 0;
+  const allPreviewItems = preview.importableCount > 0
+    ? preview.importable
+    : hasOnlyDuplicates
+      ? preview.duplicates
+      : hasOnlyOwnAccount
+        ? preview.excludedOwn
+        : [];
+  const previewPageSize = 3;
+  const previewPageCount = Math.max(1, Math.ceil(allPreviewItems.length / previewPageSize));
+  const safePreviewPage = Math.min(previewPage, previewPageCount);
+  const previewStart = (safePreviewPage - 1) * previewPageSize;
+  const previewEnd = Math.min(previewStart + previewPageSize, allPreviewItems.length);
+  const previewDisplayStart = allPreviewItems.length > 0 ? previewStart + 1 : 0;
+  const previewItems = allPreviewItems.slice(previewStart, previewEnd);
+  const previewScopeKey = `${hasOnlyDuplicates ? "duplicates" : hasOnlyOwnAccount ? "own" : "importable"}:${allPreviewItems.map((signal) => signal.id).join("|")}`;
+
+  useEffect(() => {
+    setPreviewPage(1);
+  }, [previewScopeKey]);
 
   return (
     <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3 text-xs text-white/65">
@@ -4749,20 +5345,52 @@ function SignalImportPreview({ preview }: { preview: SignalImportPreviewData }) 
       ) : hasOnlyDuplicates ? (
         <div className="mt-3 grid gap-2">
           <p className="rounded-md border border-amber-500/10 bg-amber-500/10 px-3 py-2 leading-5 text-amber-100/80">这批结果已经在互动队列里，不需要重复导入。</p>
-          {duplicateItems.map((signal) => (
+          {previewItems.map((signal) => (
             <SignalPreviewRow key={signal.id} signal={signal} badge="已在队列" />
           ))}
         </div>
       ) : hasOnlyOwnAccount ? (
         <div className="mt-3 grid gap-2">
           <p className="rounded-md border border-rose-500/10 bg-rose-500/10 px-3 py-2 leading-5 text-rose-100/80">这批结果识别为自己的账号数据，已阻止导入。请换竞品/KOL 或外部目标用户账号。</p>
-          {excludedOwnItems.map((signal) => (
+          {previewItems.map((signal) => (
             <SignalPreviewRow key={signal.id} signal={signal} badge="已排除" />
           ))}
         </div>
       ) : (
         <p className="mt-3 leading-5 text-white/40">粘贴 Grok 结果后，这里会显示解析和去重结果。</p>
       )}
+      {allPreviewItems.length > previewPageSize ? (
+        <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.08] pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-white/45">
+            {tr(
+              `第 ${safePreviewPage}/${previewPageCount} 页 · 当前 ${previewDisplayStart}-${previewEnd} / 共 ${allPreviewItems.length} 条`,
+              `Page ${safePreviewPage}/${previewPageCount} · Showing ${previewDisplayStart}-${previewEnd} of ${allPreviewItems.length}`
+            )}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="tech-secondary h-8"
+              disabled={safePreviewPage <= 1}
+              onClick={() => setPreviewPage((page) => Math.max(1, page - 1))}
+            >
+              {tr("上一页", "Previous")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="tech-secondary h-8"
+              disabled={safePreviewPage >= previewPageCount}
+              onClick={() => setPreviewPage((page) => Math.min(previewPageCount, page + 1))}
+            >
+              {tr("下一页", "Next")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

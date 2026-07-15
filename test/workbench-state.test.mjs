@@ -9,6 +9,8 @@ const {
   createOperationalWorkbenchSnapshot,
   DEFAULT_GROK_BRIDGE_STATE,
   DEFAULT_GROWTH_MEMORY_STATE,
+  DEFAULT_ONBOARDING_STATE,
+  mergeConcurrentWorkbenchState,
   normalizeWorkbenchState,
   parseStoredWorkbenchState,
   createWorkbenchBackup,
@@ -91,6 +93,23 @@ test("serializeWorkbenchState writes a versioned restorable snapshot", () => {
   assert.equal(parsed.grokBridge.xProfileUrl, "@cursor");
 });
 
+test("normalizeWorkbenchState persists first-run onboarding state without affecting older snapshots", () => {
+  const legacy = normalizeWorkbenchState({ mode: "growth", forms: fallbackForms });
+  assert.deepEqual(legacy.onboarding, DEFAULT_ONBOARDING_STATE);
+
+  const started = normalizeWorkbenchState({
+    mode: "growth",
+    forms: fallbackForms,
+    onboarding: {
+      startedAt: "2026-07-15T01:00:00.000Z",
+      welcomeDismissedAt: "2026-07-15T01:01:00.000Z",
+    },
+  });
+
+  assert.equal(started.onboarding.startedAt, "2026-07-15T01:00:00.000Z");
+  assert.equal(started.onboarding.welcomeDismissedAt, "2026-07-15T01:01:00.000Z");
+});
+
 test("operational autosave keeps saved positioning but persists imported queue input", () => {
   const savedForms = {
     outbound: { ...fallbackForms.outbound, productName: "Saved outbound", leadInput: "old outbound queue" },
@@ -119,6 +138,53 @@ test("operational autosave keeps saved positioning but persists imported queue i
   assert.equal(snapshot.forms.outbound.productName, "Saved outbound");
   assert.equal(snapshot.forms.outbound.leadInput, "new outbound queue");
   assert.equal(snapshot.signals.growth.length, 1);
+});
+
+test("concurrent workbench merge keeps remote imports when a stale page has no local changes", () => {
+  const base = normalizeWorkbenchState({ mode: "growth", forms: fallbackForms });
+  const local = normalizeWorkbenchState(base);
+  const remote = normalizeWorkbenchState({
+    ...base,
+    signals: {
+      ...base.signals,
+      growth: [{ id: "remote-1", source: "grok", platform: "X", author: "Remote", url: "https://x.com/remote/status/1", text: "remote import", importedAt: "2026-07-15T01:00:00.000Z", status: "new", tags: [] }],
+    },
+  });
+
+  const merged = mergeConcurrentWorkbenchState(base, local, remote);
+  assert.deepEqual(merged.signals.growth.map((signal) => signal.id), ["remote-1"]);
+});
+
+test("concurrent workbench merge combines imports from two active pages", () => {
+  const base = normalizeWorkbenchState({ mode: "growth", forms: fallbackForms });
+  const local = normalizeWorkbenchState({
+    ...base,
+    signals: {
+      ...base.signals,
+      growth: [{ id: "local-1", source: "grok", platform: "X", author: "Local", url: "https://x.com/local/status/1", text: "local import", importedAt: "2026-07-15T01:01:00.000Z", status: "new", tags: [] }],
+    },
+  });
+  const remote = normalizeWorkbenchState({
+    ...base,
+    signals: {
+      ...base.signals,
+      growth: [{ id: "remote-1", source: "grok", platform: "X", author: "Remote", url: "https://x.com/remote/status/1", text: "remote import", importedAt: "2026-07-15T01:02:00.000Z", status: "new", tags: [] }],
+    },
+  });
+
+  const merged = mergeConcurrentWorkbenchState(base, local, remote);
+  assert.deepEqual(new Set(merged.signals.growth.map((signal) => signal.id)), new Set(["local-1", "remote-1"]));
+});
+
+test("concurrent workbench merge preserves remote additions while applying a local deletion", () => {
+  const first = { id: "first", source: "grok", platform: "X", author: "First", url: "https://x.com/first/status/1", text: "first", importedAt: "2026-07-15T01:00:00.000Z", status: "new", tags: [] };
+  const second = { id: "second", source: "grok", platform: "X", author: "Second", url: "https://x.com/second/status/1", text: "second", importedAt: "2026-07-15T01:03:00.000Z", status: "new", tags: [] };
+  const base = normalizeWorkbenchState({ mode: "growth", forms: fallbackForms, signals: { outbound: [], growth: [first] } });
+  const local = normalizeWorkbenchState({ ...base, signals: { ...base.signals, growth: [] } });
+  const remote = normalizeWorkbenchState({ ...base, signals: { ...base.signals, growth: [first, second] } });
+
+  const merged = mergeConcurrentWorkbenchState(base, local, remote);
+  assert.deepEqual(merged.signals.growth.map((signal) => signal.id), ["second"]);
 });
 
 test("normalizeWorkbenchState keeps structured signals by mode", () => {

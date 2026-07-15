@@ -158,9 +158,9 @@ Install it:
 1. Keep the workbench open at `http://localhost:3001` or `http://127.0.0.1:3001`.
 2. In Chrome, open `chrome://extensions/` and enable **Developer mode**.
 3. Click **Load unpacked** and select `extension/ray-growth-os-x-helper`.
-4. Open the extension popup, save your X handle, and click **Read queue from App**.
-5. Enter X through **Copy reply and open source post** in the workbench, then publish the reply yourself.
-6. Once the reply appears in the source conversation, the extension saves its URL and writes the replied status back automatically.
+4. Save your public X profile in App Settings, or save your X handle once in the extension popup. The popup does not need to stay open.
+5. Enter X through **Copy reply and open source post** in the workbench. The extension reads and associates that item automatically; no manual queue sync is needed.
+6. Publish the reply yourself. Once it appears in the source conversation, the extension saves its URL and writes the replied status back automatically.
 7. If capture was missed, stay on the source conversation and click **Recover reply on current page and write back**.
 8. Only after a reply URL is recorded should you use **Inspect recorded reply links** to check later public feedback.
 
