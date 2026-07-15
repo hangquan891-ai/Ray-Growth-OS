@@ -12,16 +12,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  AI_RESPONSE_CONFIG_STORAGE_KEY,
   DEFAULT_AI_RESPONSE_MODEL,
   DEFAULT_GROK_PROXY_MODEL,
-  GROK_PROXY_CONFIG_STORAGE_KEY,
-  X_PROFILE_CONFIG_STORAGE_KEY,
   normalizeAiResponseConfig,
   normalizeGrokProxyConfig,
   normalizeXProfileConfig,
 } from "@/lib/codeproxy-grok";
-import { DEFAULT_WORKBENCH_STATE, WORKBENCH_STORAGE_KEY, serializeWorkbenchState } from "@/lib/workbench-state";
+import { loadSharedSettings, saveSharedSettings, type SharedSettings, writeLocalState } from "@/lib/local-state-client";
+import { DEFAULT_WORKBENCH_STATE } from "@/lib/workbench-state";
 
 const CODEPROXY_MESSAGES_URL = "https://codeproxy.dev/v1/messages";
 const CODEPROXY_RESPONSES_URL = "https://codeproxy.dev/v1/responses";
@@ -43,7 +41,8 @@ function maskSecret(value: string, locale: "zh-CN" | "en") {
 }
 
 function statusClass(hasKey: boolean) {
-  return hasKey ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-amber-500/10 bg-amber-500/10 text-amber-300";
+  const layout = "w-fit shrink-0 whitespace-nowrap";
+  return hasKey ? `${layout} border-emerald-500/10 bg-emerald-500/10 text-emerald-300` : `${layout} border-amber-500/10 bg-amber-500/10 text-amber-300`;
 }
 
 export default function SettingsPage() {
@@ -57,23 +56,22 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    try {
-      const storedGrok = window.localStorage.getItem(GROK_PROXY_CONFIG_STORAGE_KEY);
-      const grokConfig = normalizeGrokProxyConfig(storedGrok ? JSON.parse(storedGrok) : {}) as ProxyConfig;
-      setGrokApiKey(grokConfig.apiKey);
-      setGrokModel(grokConfig.model || DEFAULT_GROK_PROXY_MODEL);
-
-      const storedAi = window.localStorage.getItem(AI_RESPONSE_CONFIG_STORAGE_KEY);
-      const aiConfig = normalizeAiResponseConfig(storedAi ? JSON.parse(storedAi) : {}) as ProxyConfig;
-      setAiApiKey(aiConfig.apiKey);
-      setAiModel(aiConfig.model || DEFAULT_AI_RESPONSE_MODEL);
-
-      const storedXProfile = window.localStorage.getItem(X_PROFILE_CONFIG_STORAGE_KEY);
-      const xProfileConfig = normalizeXProfileConfig(storedXProfile ? JSON.parse(storedXProfile) : {}) as XProfileConfig;
-      setXProfileUrl(xProfileConfig.profileUrl);
-    } catch {
-      notify(tr("本地配置读取失败，已回退为默认模型。可以重新保存一次。", "Local configuration could not be read. Default models were restored; save again to retry."), "error");
-    }
+    let cancelled = false;
+    void loadSharedSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        setGrokApiKey(settings.grok.apiKey);
+        setGrokModel(settings.grok.model || DEFAULT_GROK_PROXY_MODEL);
+        setAiApiKey(settings.ai.apiKey);
+        setAiModel(settings.ai.model || DEFAULT_AI_RESPONSE_MODEL);
+        setXProfileUrl(settings.xProfile.profileUrl);
+      })
+      .catch(() => {
+        if (!cancelled) notify(tr("本机共享配置读取失败，请确认本地服务仍在运行。", "Shared local settings could not be read. Make sure the local service is still running."), "error");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const grokHasKey = useMemo(() => grokApiKey.trim().length > 0, [grokApiKey]);
@@ -85,76 +83,93 @@ export default function SettingsPage() {
     showToast(nextMessage, tone);
   }
 
-  function saveGrokConfig() {
+  function settingsPayload(overrides: Partial<Pick<SharedSettings, "grok" | "ai" | "xProfile">> = {}): SharedSettings {
+    return {
+      version: 1,
+      grok: overrides.grok ?? (normalizeGrokProxyConfig({ apiKey: grokApiKey, model: grokModel }) as ProxyConfig),
+      ai: overrides.ai ?? (normalizeAiResponseConfig({ apiKey: aiApiKey, model: aiModel }) as ProxyConfig),
+      xProfile: overrides.xProfile ?? (normalizeXProfileConfig({ profileUrl: xProfileUrl }) as XProfileConfig),
+    };
+  }
+
+  async function saveGrokConfig() {
     const config = normalizeGrokProxyConfig({ apiKey: grokApiKey, model: grokModel }) as ProxyConfig;
     try {
-      window.localStorage.setItem(GROK_PROXY_CONFIG_STORAGE_KEY, JSON.stringify(config));
+      await saveSharedSettings(settingsPayload({ grok: config }));
       setGrokApiKey(config.apiKey);
       setGrokModel(config.model);
       notify(config.apiKey ? tr("已保存 Grok 配置。现在可以回到工作台使用竞品洞察和中转查询。", "Grok settings saved. You can now use competitor insights and proxy search.") : tr("已保存 Grok 默认模型，但还没有填写密钥。", "The default Grok model was saved, but no API key is configured yet."), config.apiKey ? "success" : "info");
     } catch {
-      notify(tr("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "Save failed because the browser blocked localStorage. Check private-mode or site permissions."), "error");
+      notify(tr("保存失败：无法写入本机共享数据库，请确认本地服务仍在运行。", "Save failed because the shared local database is unavailable. Make sure the local service is running."), "error");
     }
   }
 
-  function saveAiConfig() {
+  async function saveAiConfig() {
     const config = normalizeAiResponseConfig({ apiKey: aiApiKey, model: aiModel }) as ProxyConfig;
     try {
-      window.localStorage.setItem(AI_RESPONSE_CONFIG_STORAGE_KEY, JSON.stringify(config));
+      await saveSharedSettings(settingsPayload({ ai: config }));
       setAiApiKey(config.apiKey);
       setAiModel(config.model);
       notify(config.apiKey ? tr("已保存 GPT-5.5 配置。评分和草稿生成会走 codeproxy.dev/v1/responses。", "AI settings saved. Scoring and drafts will use codeproxy.dev/v1/responses.") : tr("已保存 GPT-5.5 默认模型，但还没有填写密钥。", "The default AI model was saved, but no API key is configured yet."), config.apiKey ? "success" : "info");
     } catch {
-      notify(tr("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "Save failed because the browser blocked localStorage. Check private-mode or site permissions."), "error");
+      notify(tr("保存失败：无法写入本机共享数据库，请确认本地服务仍在运行。", "Save failed because the shared local database is unavailable. Make sure the local service is running."), "error");
     }
   }
 
-  function saveXProfileConfig() {
+  async function saveXProfileConfig() {
     const config = normalizeXProfileConfig({ profileUrl: xProfileUrl }) as XProfileConfig;
     try {
-      window.localStorage.setItem(X_PROFILE_CONFIG_STORAGE_KEY, JSON.stringify(config));
+      await saveSharedSettings(settingsPayload({ xProfile: config }));
       setXProfileUrl(config.profileUrl);
       notify(config.profileUrl ? tr("已保存 X 主页地址。回到第 1 步后可以让 AI 生成一版定位草稿。", "Public X profile saved. Return to positioning to generate a draft.") : tr("已保存空的 X 主页地址。需要填写后才可以 AI 帮填定位。", "An empty X profile was saved. Add a profile URL before using AI positioning."), config.profileUrl ? "success" : "info");
     } catch {
-      notify(tr("保存失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "Save failed because the browser blocked localStorage. Check private-mode or site permissions."), "error");
+      notify(tr("保存失败：无法写入本机共享数据库，请确认本地服务仍在运行。", "Save failed because the shared local database is unavailable. Make sure the local service is running."), "error");
     }
   }
 
-  function clearXProfileConfig() {
+  async function clearXProfileConfig() {
     try {
-      window.localStorage.removeItem(X_PROFILE_CONFIG_STORAGE_KEY);
-    } catch {}
-    setXProfileUrl("");
-    notify(tr("已清空 X 主页地址。", "Public X profile cleared."), "info");
+      await saveSharedSettings(settingsPayload({ xProfile: normalizeXProfileConfig({}) as XProfileConfig }));
+      setXProfileUrl("");
+      notify(tr("已清空 X 主页地址。", "Public X profile cleared."), "info");
+    } catch {
+      notify(tr("清空失败：无法写入本机共享数据库。", "Clear failed because the shared local database is unavailable."), "error");
+    }
   }
 
-  function clearGrokConfig() {
+  async function clearGrokConfig() {
     try {
-      window.localStorage.removeItem(GROK_PROXY_CONFIG_STORAGE_KEY);
-    } catch {}
-    setGrokApiKey("");
-    setGrokModel(DEFAULT_GROK_PROXY_MODEL);
-    notify(tr("已清空 Grok 找人配置。", "Grok discovery settings cleared."), "info");
+      const config = normalizeGrokProxyConfig({}) as ProxyConfig;
+      await saveSharedSettings(settingsPayload({ grok: config }));
+      setGrokApiKey("");
+      setGrokModel(DEFAULT_GROK_PROXY_MODEL);
+      notify(tr("已清空 Grok 找人配置。", "Grok discovery settings cleared."), "info");
+    } catch {
+      notify(tr("清空失败：无法写入本机共享数据库。", "Clear failed because the shared local database is unavailable."), "error");
+    }
   }
 
-  function clearAiConfig() {
+  async function clearAiConfig() {
     try {
-      window.localStorage.removeItem(AI_RESPONSE_CONFIG_STORAGE_KEY);
-    } catch {}
-    setAiApiKey("");
-    setAiModel(DEFAULT_AI_RESPONSE_MODEL);
-    notify(tr("已清空 GPT-5.5 评分/草稿配置。", "AI scoring and draft settings cleared."), "info");
+      const config = normalizeAiResponseConfig({}) as ProxyConfig;
+      await saveSharedSettings(settingsPayload({ ai: config }));
+      setAiApiKey("");
+      setAiModel(DEFAULT_AI_RESPONSE_MODEL);
+      notify(tr("已清空 GPT-5.5 评分/草稿配置。", "AI scoring and draft settings cleared."), "info");
+    } catch {
+      notify(tr("清空失败：无法写入本机共享数据库。", "Clear failed because the shared local database is unavailable."), "error");
+    }
   }
 
-  function clearWorkbenchData() {
+  async function clearWorkbenchData() {
     const confirmed = window.confirm(tr("只清空工作台测试数据、队列、反馈和增长记忆；Grok / GPT-5.5 密钥会保留。确认清空吗？", "Clear local workbench data, queue items, feedback, and growth learning? Grok and AI keys will be kept."));
     if (!confirmed) return;
 
     try {
-      window.localStorage.setItem(WORKBENCH_STORAGE_KEY, serializeWorkbenchState(DEFAULT_WORKBENCH_STATE));
+      await writeLocalState("workbench", DEFAULT_WORKBENCH_STATE);
       notify(tr("已清空工作台测试数据，密钥配置已保留。返回工作台后会从空白状态开始。", "Local workbench data was cleared and API settings were kept. The workbench will start empty."), "success");
     } catch {
-      notify(tr("清空失败：浏览器禁止访问 localStorage。请检查隐私模式或站点权限。", "Clear failed because the browser blocked localStorage. Check private-mode or site permissions."), "error");
+      notify(tr("清空失败：无法写入本机共享数据库，请确认本地服务仍在运行。", "Clear failed because the shared local database is unavailable. Make sure the local service is running."), "error");
     }
   }
 
@@ -318,9 +333,9 @@ export default function SettingsPage() {
         <div className="fade-up delay-4 grid gap-3 rounded-lg border border-blue-400/10 bg-blue-400/5 p-4 text-sm leading-6 text-blue-100/75 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div>
             <div className="mb-2 flex items-center gap-2 font-semibold text-blue-100">
-              <ShieldCheck className="h-4 w-4" /> {t("localStorage")}
+              <ShieldCheck className="h-4 w-4" /> {tr("本机共享存储", "Shared local storage")}
             </div>
-            {tr("密钥和 X 主页地址只保存在当前浏览器 localStorage，不进入工作台 JSON 备份。清空测试数据不会删除 Grok / GPT-5.5 密钥和 X 主页地址。", "API keys and the X profile URL stay in this browser's localStorage and are excluded from workbench JSON backups. Clearing workbench data does not delete these settings.")}{message ? <span className="ml-2 text-emerald-200"><CheckCircle2 className="mr-1 inline h-4 w-4" />{message}</span> : null}
+            {tr("设置和新工作台数据保存在这台电脑的 SQLite 数据库中，同一台电脑上的浏览器会读取同一份数据。升级时只迁移当前浏览器里的 Grok / GPT-5.5 / X 主页设置，旧队列和历史反馈不会迁移；清空测试数据也不会删除这些设置。", "Settings and new workbench data are stored in a SQLite database on this computer, shared by browsers on the same device. During upgrade, only Grok, AI, and X profile settings are migrated from the current browser; legacy queues and feedback are not migrated. Clearing workbench data keeps these settings.")}{message ? <span className="ml-2 text-emerald-200"><CheckCircle2 className="mr-1 inline h-4 w-4" />{message}</span> : null}
           </div>
           <Button variant="outline" className="tech-secondary w-full md:w-auto" onClick={clearWorkbenchData}>
             <Trash2 className="h-4 w-4" /> {tr("清空测试数据", "Clear local workbench data")}

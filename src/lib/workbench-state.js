@@ -337,6 +337,25 @@
     return JSON.stringify(normalizeWorkbenchState(snapshot));
   }
 
+  function createOperationalWorkbenchSnapshot(snapshot, savedForms) {
+    const current = normalizeWorkbenchState(snapshot);
+    const persistedForms = normalizeFormsState(savedForms, current.forms);
+
+    return {
+      ...current,
+      forms: {
+        outbound: {
+          ...persistedForms.outbound,
+          leadInput: current.forms.outbound.leadInput,
+        },
+        growth: {
+          ...persistedForms.growth,
+          leadInput: current.forms.growth.leadInput,
+        },
+      },
+    };
+  }
+
   function backupDateStamp(now) {
     const date = now ? new Date(now) : new Date();
     if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
@@ -369,6 +388,7 @@
 
   return {
     CURRENT_VERSION,
+    createOperationalWorkbenchSnapshot,
     createWorkbenchBackup,
     parseWorkbenchBackup,
     DEFAULT_AI_DRAFT_STATE,

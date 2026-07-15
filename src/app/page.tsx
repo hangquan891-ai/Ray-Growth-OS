@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type Dispatch, type MouseEvent as ReactMouseEvent, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MouseEvent as ReactMouseEvent, type ReactNode, type SetStateAction } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -46,9 +46,11 @@ import { buildGrokSearchPrompt } from "@/lib/grok-utils";
 import { AI_DRAFT_LIMIT, applyAiDraftOverrides, buildDraftRequestInput } from "@/lib/llm-drafts";
 import { applyGrowthMemoryToQueueItems, buildGrowthMemoryPromptContext, buildGrowthMemoryRequestInput, growthMemoryKeywordText, normalizeGrowthMemoryState } from "@/lib/growth-memory";
 import { AI_SCORE_LIMIT, applyAiScoreOverrides, buildScoreRequestInput } from "@/lib/llm-scoring";
+import { loadSharedSettings, readLocalState, writeLocalState } from "@/lib/local-state-client";
 import { runGrowthWorkflow } from "@/lib/outbound";
+import { PROFILE_MAX_RETRIES, isRetryableProfileFailure, profileRetryDelayMs } from "@/lib/profile-retry";
 import { buildFeedbackLearningPack, createSignal, formatSignalsAsLeadInput, mergeSignals, parseSignalsFromText, signalDedupKey } from "@/lib/signals";
-import { CURRENT_VERSION, DEFAULT_AI_DRAFT_STATE, DEFAULT_AI_SCORE_STATE, DEFAULT_GROK_BRIDGE_STATE, DEFAULT_GROWTH_MEMORY_STATE, DEFAULT_SIGNAL_STATE, WORKBENCH_STORAGE_KEY, createWorkbenchBackup, parseStoredWorkbenchState, parseWorkbenchBackup, serializeWorkbenchState } from "@/lib/workbench-state";
+import { CURRENT_VERSION, DEFAULT_AI_DRAFT_STATE, DEFAULT_AI_SCORE_STATE, DEFAULT_GROK_BRIDGE_STATE, DEFAULT_GROWTH_MEMORY_STATE, DEFAULT_SIGNAL_STATE, DEFAULT_WORKBENCH_STATE, createOperationalWorkbenchSnapshot, createWorkbenchBackup, parseStoredWorkbenchState, parseWorkbenchBackup, serializeWorkbenchState } from "@/lib/workbench-state";
 import { cn } from "@/lib/utils";
 
 type Mode = "outbound" | "growth";
@@ -204,7 +206,11 @@ type AccountRadarInsight = {
 type GrokProxyApiResponse = {
   ok?: boolean;
   status?: string;
+  diagnosticId?: number;
   message?: string;
+  technicalMessage?: string;
+  suggestion?: string;
+  retryable?: boolean;
   model?: string;
   text?: string;
   rawText?: string;
@@ -220,6 +226,25 @@ type GrokProxyApiResponse = {
     preview?: string;
   } | null;
 };
+
+function grokFailureMessage(data: GrokProxyApiResponse, fallback: string, locale: "zh-CN" | "en") {
+  const message = String(data.message || fallback).trim();
+  const technicalMessage = String(data.technicalMessage || "").trim();
+  const suggestion = String(data.suggestion || "").trim();
+  const parts = [message];
+
+  if (technicalMessage && !message.toLowerCase().includes(technicalMessage.toLowerCase())) {
+    parts.push(locale === "en" ? `Technical cause: ${technicalMessage}` : `技术原因：${technicalMessage}`);
+  }
+  if (suggestion) {
+    parts.push(locale === "en" ? `What to check: ${suggestion}` : `建议检查：${suggestion}`);
+  }
+  if (data.diagnosticId) {
+    parts.push(locale === "en" ? `Local log #${data.diagnosticId}` : `本机日志 #${data.diagnosticId}`);
+  }
+
+  return parts.join(" ");
+}
 
 type Signal = {
   id: string;
@@ -303,6 +328,7 @@ type AiScoreRunResult = {
 type DraftApiResponse = {
   ok?: boolean;
   configured?: boolean;
+  diagnosticId?: number;
   model?: string;
   message?: string;
   drafts?: AiDraft[];
@@ -312,6 +338,7 @@ type AiDraftRunResult = {
   count: number;
   model: string;
   failedCount?: number;
+  failedDiagnosticIds?: number[];
 };
 
 type AiProfile = Pick<FormState, "productName" | "description" | "targetCustomer" | "competitors" | "painPoints" | "replyGoal" | "productContext"> & {
@@ -321,10 +348,21 @@ type AiProfile = Pick<FormState, "productName" | "description" | "targetCustomer
 type ProfileApiResponse = {
   ok?: boolean;
   configured?: boolean;
+  diagnosticId?: number;
   model?: string;
   message?: string;
   profile?: Partial<AiProfile>;
+  retryable?: boolean;
+  status?: string;
 };
+
+type AiProfileRetryProgress = {
+  maxRetries: number;
+  reason: string;
+  retryNumber: number;
+};
+
+type AiProfileRetryHandler = (progress: AiProfileRetryProgress) => void;
 
 type AiProfileRunResult = {
   model: string;
@@ -460,6 +498,7 @@ type SignalFeedbackStatus = "none" | "got_reply" | "no_reply" | "followed" | "re
 type SignalFeedbackFilter = SignalFeedbackStatus | "all";
 type ProcessFilterKey = "pending" | "processed" | "engaged" | "saved" | "deferred" | "skipped";
 type PriorityFilterKey = "hot" | "warm" | "low";
+type QueueTimeRangeKey = "today" | "yesterday" | "7d" | "30d" | "all";
 type FilterOption<T extends string> = { key: T | "all"; label: string; count: number };
 type OwnAccountIdentity = { handles: string[]; names: string[]; label: string };
 
@@ -607,7 +646,7 @@ function createSignalPreviewFromCandidates(candidates: Signal[], existingSignals
 
 function mergeLeadInputWithSignals(leadInput: string, modeSignals: Signal[]) {
   const manualSignals = parseSignalsFromText(leadInput, { source: "manual" }) as Signal[];
-  const merged = mergeSignals(manualSignals, modeSignals ?? []) as { signals: Signal[] };
+  const merged = mergeSignals(modeSignals ?? [], manualSignals) as { signals: Signal[] };
   return formatSignalsAsLeadInput(merged.signals);
 }
 
@@ -630,6 +669,33 @@ function isToday(value?: string) {
   if (Number.isNaN(date.getTime())) return false;
   const today = new Date();
   return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+}
+
+function matchesQueueTimeRange(value: string | undefined, range: QueueTimeRangeKey, now = new Date()) {
+  if (range === "all") return true;
+  if (!value) return false;
+
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return false;
+
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const start = new Date(todayStart);
+  const end = new Date(todayStart);
+
+  if (range === "today") {
+    end.setDate(end.getDate() + 1);
+  } else if (range === "yesterday") {
+    start.setDate(start.getDate() - 1);
+  } else if (range === "7d") {
+    start.setDate(start.getDate() - 6);
+    end.setDate(end.getDate() + 1);
+  } else {
+    start.setDate(start.getDate() - 29);
+    end.setDate(end.getDate() + 1);
+  }
+
+  return timestamp >= start.getTime() && timestamp < end.getTime();
 }
 
 function emptyExecutionCounts(): Record<SignalExecutionStatus, number> {
@@ -1017,85 +1083,128 @@ export default function Home() {
   const { locale } = useI18n();
   const mode: Mode = "growth";
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
-  const [forms, setForms] = useState<Record<Mode, FormState>>(initialState);
+  const [forms, setForms] = useState<Record<Mode, FormState>>(DEFAULT_WORKBENCH_STATE.forms as Record<Mode, FormState>);
   const [grokBridge, setGrokBridge] = useState<GrokBridgeState>(DEFAULT_GROK_BRIDGE_STATE);
   const [signals, setSignals] = useState<SignalState>(DEFAULT_SIGNAL_STATE as SignalState);
   const [aiScores, setAiScores] = useState<AiScoreState>(DEFAULT_AI_SCORE_STATE as AiScoreState);
   const [aiDrafts, setAiDrafts] = useState<AiDraftState>(DEFAULT_AI_DRAFT_STATE as AiDraftState);
   const [growthMemory, setGrowthMemory] = useState<GrowthMemoryState>(DEFAULT_GROWTH_MEMORY_STATE as GrowthMemoryState);
   const [isWorkbenchReady, setIsWorkbenchReady] = useState(false);
+  const [canPersistWorkbench, setCanPersistWorkbench] = useState(false);
   const [busyOverlay, setBusyOverlay] = useState<BusyOverlayState>(null);
+  const savedPositioningFormsRef = useRef<Record<Mode, FormState>>(DEFAULT_WORKBENCH_STATE.forms as Record<Mode, FormState>);
+  const workbenchWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const autoSaveErrorShownRef = useRef(false);
 
-  useEffect(() => {
-    try {
-      const restored = parseStoredWorkbenchState(window.localStorage.getItem(WORKBENCH_STORAGE_KEY), {
-        version: CURRENT_VERSION,
-        mode: "growth",
-        forms: initialState,
-        grokBridge: DEFAULT_GROK_BRIDGE_STATE,
-        signals: DEFAULT_SIGNAL_STATE,
-        aiScores: DEFAULT_AI_SCORE_STATE,
-        aiDrafts: DEFAULT_AI_DRAFT_STATE,
-        growthMemory: DEFAULT_GROWTH_MEMORY_STATE,
+  const persistWorkbenchSnapshot = useCallback(async (value: object) => {
+    const nextWrite = workbenchWriteQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        await writeLocalState("workbench", value);
       });
-      const unified = unifyRestoredWorkbenchState(restored);
-      setForms(unified.forms);
-      setGrokBridge(unified.grokBridge);
-      setSignals(unified.signals);
-      setAiScores(unified.aiScores);
-      setAiDrafts(unified.aiDrafts);
-      setGrowthMemory(unified.growthMemory);
-    } finally {
-      setIsWorkbenchReady(true);
-    }
+    workbenchWriteQueueRef.current = nextWrite;
+    await nextWrite;
   }, []);
 
   useEffect(() => {
-    function reloadFromExtensionSync() {
-      const restored = parseStoredWorkbenchState(window.localStorage.getItem(WORKBENCH_STORAGE_KEY), {
-        version: CURRENT_VERSION,
-        mode: "growth",
-        forms: initialState,
-        grokBridge: DEFAULT_GROK_BRIDGE_STATE,
-        signals: DEFAULT_SIGNAL_STATE,
-        aiScores: DEFAULT_AI_SCORE_STATE,
-        aiDrafts: DEFAULT_AI_DRAFT_STATE,
-        growthMemory: DEFAULT_GROWTH_MEMORY_STATE,
-      });
-      const unified = unifyRestoredWorkbenchState(restored);
-      setForms(unified.forms);
-      setGrokBridge(unified.grokBridge);
-      setSignals(unified.signals);
-      setAiScores(unified.aiScores);
-      setAiDrafts(unified.aiDrafts);
-      setGrowthMemory(unified.growthMemory);
-      showToast("插件同步的反馈已更新到页面。", "success");
+    let cancelled = false;
+
+    void loadSharedSettings().catch(() => {
+      if (!cancelled) showToast("共享设置读取失败，请确认本地服务仍在运行。", "error");
+    });
+
+    async function restoreWorkbench() {
+      try {
+        const response = await readLocalState<unknown>("workbench");
+        const restored = parseStoredWorkbenchState(
+          response.exists && response.value ? JSON.stringify(response.value) : null,
+          DEFAULT_WORKBENCH_STATE
+        );
+        const unified = unifyRestoredWorkbenchState(restored);
+        if (cancelled) return;
+        savedPositioningFormsRef.current = unified.forms;
+        setForms(unified.forms);
+        setGrokBridge(unified.grokBridge);
+        setSignals(unified.signals);
+        setAiScores(unified.aiScores);
+        setAiDrafts(unified.aiDrafts);
+        setGrowthMemory(unified.growthMemory);
+        setCanPersistWorkbench(true);
+      } catch {
+        if (!cancelled) {
+          setCanPersistWorkbench(false);
+          showToast("本地工作台读取失败，暂时显示空白状态。请确认本地服务仍在运行。", "error");
+        }
+      } finally {
+        if (!cancelled) setIsWorkbenchReady(true);
+      }
     }
 
-    window.addEventListener("ray-growth-os:extension-sync", reloadFromExtensionSync);
-    return () => window.removeEventListener("ray-growth-os:extension-sync", reloadFromExtensionSync);
+    void restoreWorkbench();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (!isWorkbenchReady) return;
-
-    try {
-      window.localStorage.setItem(
-        WORKBENCH_STORAGE_KEY,
-        serializeWorkbenchState({
-          mode,
-          forms,
-          grokBridge,
-          signals,
-          aiScores,
-          aiDrafts,
-          growthMemory,
-        })
-      );
-    } catch {
-      // localStorage can fail in private mode or when the browser quota is full.
+    async function reloadFromExtensionSync() {
+      try {
+        const response = await readLocalState<unknown>("workbench");
+        if (!response.exists || !response.value) return;
+        const restored = parseStoredWorkbenchState(JSON.stringify(response.value), DEFAULT_WORKBENCH_STATE);
+        const unified = unifyRestoredWorkbenchState(restored);
+        setForms((previous) => ({
+          outbound: { ...previous.outbound, leadInput: unified.forms.outbound.leadInput },
+          growth: { ...previous.growth, leadInput: unified.forms.growth.leadInput },
+        }));
+        setGrokBridge(unified.grokBridge);
+        setSignals(unified.signals);
+        setAiScores(unified.aiScores);
+        setAiDrafts(unified.aiDrafts);
+        setGrowthMemory(unified.growthMemory);
+        showToast("插件同步的反馈已更新到页面。", "success");
+      } catch {
+        showToast("插件反馈已收到，但页面重新读取本地数据失败。", "error");
+      }
     }
-  }, [aiDrafts, aiScores, forms, grokBridge, growthMemory, isWorkbenchReady, signals]);
+
+    const handleExtensionSync = () => void reloadFromExtensionSync();
+    window.addEventListener("ray-growth-os:extension-sync", handleExtensionSync);
+    return () => window.removeEventListener("ray-growth-os:extension-sync", handleExtensionSync);
+  }, []);
+
+  useEffect(() => {
+    if (!isWorkbenchReady || !canPersistWorkbench) return;
+
+    const operationalSnapshot = createOperationalWorkbenchSnapshot(
+      { mode, forms, grokBridge, signals, aiScores, aiDrafts, growthMemory },
+      savedPositioningFormsRef.current
+    );
+    const value = JSON.parse(serializeWorkbenchState(operationalSnapshot)) as object;
+
+    void persistWorkbenchSnapshot(value)
+      .then(() => {
+        autoSaveErrorShownRef.current = false;
+      })
+      .catch(() => {
+        if (autoSaveErrorShownRef.current) return;
+        autoSaveErrorShownRef.current = true;
+        showToast("队列自动保存失败：请确认本地服务仍在运行。当前页面数据尚未丢失，请不要刷新。", "error");
+      });
+  }, [
+    aiDrafts,
+    aiScores,
+    canPersistWorkbench,
+    forms.growth.leadInput,
+    forms.outbound.leadInput,
+    grokBridge,
+    growthMemory,
+    isWorkbenchReady,
+    mode,
+    persistWorkbenchSnapshot,
+    signals,
+  ]);
+
   const current = forms[mode];
   const copy = modeCopy[mode];
   const workflowLeadInput = useMemo(
@@ -1198,15 +1307,15 @@ export default function Home() {
     }));
   }
 
-  function saveCurrentWorkbench() {
+  async function saveCurrentWorkbench() {
     if (!isWorkbenchReady) {
       showToast("工作台还在加载，请稍后再保存。", "info");
       return;
     }
 
     try {
-      window.localStorage.setItem(
-        WORKBENCH_STORAGE_KEY,
+      savedPositioningFormsRef.current = forms;
+      const value = JSON.parse(
         serializeWorkbenchState({
           mode,
           forms,
@@ -1216,14 +1325,15 @@ export default function Home() {
           aiDrafts,
           growthMemory,
         })
-      );
+      ) as object;
+      await persistWorkbenchSnapshot(value);
       showToast("已保存当前定位。", "success");
     } catch {
-      showToast("保存失败：浏览器禁止访问本地存储，请检查隐私模式或站点权限。", "error");
+      showToast("保存失败：无法写入本机数据库，请确认本地服务仍在运行。", "error");
     }
   }
 
-  async function runAiProfileAutofill(): Promise<AiProfileRunResult> {
+  async function runAiProfileAutofill(onRetry?: AiProfileRetryHandler): Promise<AiProfileRunResult> {
     const xProfileConfig = loadXProfileConfig();
     if (!xProfileConfig.profileUrl.trim()) {
       throw new Error("请先到设置页保存 X 主页地址，再让 AI 帮你生成定位。");
@@ -1234,30 +1344,72 @@ export default function Home() {
       throw new Error("请先到设置页配置 GPT-5.5 / codeproxy 密钥，再用 AI 生成定位。");
     }
 
-    const response = await fetch("/api/profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode,
-        locale,
-        xProfileUrl: xProfileConfig.profileUrl,
-        current: {
-          productName: current.productName,
-          description: current.description,
-          targetCustomer: current.targetCustomer,
-          competitors: current.competitors,
-          painPoints: current.painPoints,
-          replyGoal: current.replyGoal,
-          productContext: current.productContext,
-        },
-        apiKey: aiConfig.apiKey,
-        model: aiConfig.model,
-      }),
+    const requestBody = JSON.stringify({
+      mode,
+      locale,
+      xProfileUrl: xProfileConfig.profileUrl,
+      current: {
+        productName: current.productName,
+        description: current.description,
+        targetCustomer: current.targetCustomer,
+        competitors: current.competitors,
+        painPoints: current.painPoints,
+        replyGoal: current.replyGoal,
+        productContext: current.productContext,
+      },
+      apiKey: aiConfig.apiKey,
+      model: aiConfig.model,
     });
-    const data = (await response.json().catch(() => ({ message: "AI 定位生成请求失败。" }))) as ProfileApiResponse;
 
-    if (!response.ok || !data.ok || !data.profile) {
-      throw new Error(data.message || "AI 定位生成失败，请稍后再试。");
+    let data: ProfileApiResponse = {};
+    let lastMessage = locale === "en" ? "AI positioning generation failed." : "AI 定位生成失败。";
+
+    for (let attempt = 0; attempt <= PROFILE_MAX_RETRIES; attempt += 1) {
+      let responseStatus = 0;
+      try {
+        const response = await fetch("/api/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: requestBody,
+        });
+        responseStatus = response.status;
+        data = (await response.json().catch(() => ({
+          message: locale === "en" ? "The AI service returned an unreadable response." : "AI 服务返回了无法读取的响应。",
+          retryable: response.ok || response.status >= 500,
+          status: "invalid_response",
+        }))) as ProfileApiResponse;
+
+        if (response.ok && data.ok && data.profile) break;
+
+        lastMessage = data.message || (locale === "en" ? "AI positioning generation failed." : "AI 定位生成失败。");
+        const retryable = isRetryableProfileFailure({
+          httpStatus: responseStatus,
+          retryable: data.retryable,
+          status: data.status,
+        });
+        if (!retryable) throw new Error(lastMessage);
+      } catch (error) {
+        if (error instanceof Error && responseStatus > 0) throw error;
+        lastMessage = error instanceof Error && error.message
+          ? error.message
+          : locale === "en"
+            ? "The AI request could not reach the local service."
+            : "AI 请求未能连接到本地服务。";
+      }
+
+      const retryNumber = attempt + 1;
+      if (retryNumber > PROFILE_MAX_RETRIES) {
+        throw new Error(locale === "en"
+          ? `Still unsuccessful after ${PROFILE_MAX_RETRIES} automatic retries. Last error: ${lastMessage}`
+          : `自动重试 ${PROFILE_MAX_RETRIES} 次后仍未成功。最后一次错误：${lastMessage}`);
+      }
+
+      onRetry?.({ maxRetries: PROFILE_MAX_RETRIES, reason: lastMessage, retryNumber });
+      await new Promise((resolve) => window.setTimeout(resolve, profileRetryDelayMs(retryNumber)));
+    }
+
+    if (!data.ok || !data.profile) {
+      throw new Error(lastMessage);
     }
 
     const profile = data.profile as AiProfile;
@@ -1589,6 +1741,7 @@ export default function Home() {
         let savedCount = 0;
         let resolvedModel = "AI";
         const failedItems: string[] = [];
+        const failedDiagnosticIds = new Set<number>();
         const concurrency = Math.min(2, totalCount);
 
         async function generateOneDraft(index: number) {
@@ -1609,7 +1762,9 @@ export default function Home() {
             const data = (await response.json().catch(() => ({ message: "AI 草稿生成请求失败。" }))) as DraftApiResponse;
 
             if (!response.ok || !data.ok || !Array.isArray(data.drafts)) {
-              throw new Error(data.message || "AI 草稿生成失败，已保留本地规则草稿。");
+              if (data.diagnosticId) failedDiagnosticIds.add(data.diagnosticId);
+              const diagnosticLabel = data.diagnosticId ? `（日志 #${data.diagnosticId}）` : "";
+              throw new Error(`${data.message || "AI 草稿生成失败，已保留本地规则草稿。"}${diagnosticLabel}`);
             }
 
             if (data.model) resolvedModel = data.model;
@@ -1619,6 +1774,7 @@ export default function Home() {
 
             if (generatedCount === 0) {
               failedItems.push(displayName);
+              if (data.diagnosticId) failedDiagnosticIds.add(data.diagnosticId);
               return;
             }
 
@@ -1655,10 +1811,18 @@ export default function Home() {
         await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
         if (savedCount === 0) {
-          throw new Error("AI 草稿生成没有成功保存任何结果。可以稍后重试，或先少选几条再跑。");
+          const diagnosticLabel = failedDiagnosticIds.size
+            ? ` 日志编号：${Array.from(failedDiagnosticIds).map((id) => `#${id}`).join("、")}。`
+            : "";
+          throw new Error(`AI 草稿生成没有成功保存任何结果。${diagnosticLabel}可以稍后重试，或先少选几条再跑。`);
         }
 
-        return { count: savedCount, model: resolvedModel, failedCount: failedItems.length };
+        return {
+          count: savedCount,
+          model: resolvedModel,
+          failedCount: failedItems.length,
+          failedDiagnosticIds: Array.from(failedDiagnosticIds),
+        };
       }
     );
   }
@@ -1830,12 +1994,27 @@ export default function Home() {
     }
 
     const unified = unifyRestoredWorkbenchState(restored.state);
+    savedPositioningFormsRef.current = unified.forms;
     setForms(unified.forms);
     setGrokBridge(unified.grokBridge);
     setSignals(unified.signals);
     setAiScores(unified.aiScores);
     setAiDrafts(unified.aiDrafts);
     setGrowthMemory(unified.growthMemory);
+    const value = JSON.parse(
+      serializeWorkbenchState({
+        mode,
+        forms: unified.forms,
+        grokBridge: unified.grokBridge,
+        signals: unified.signals,
+        aiScores: unified.aiScores,
+        aiDrafts: unified.aiDrafts,
+        growthMemory: unified.growthMemory,
+      })
+    ) as object;
+    void persistWorkbenchSnapshot(value).catch(() => {
+      showToast("备份已恢复到当前页面，但写入本机数据库失败，请暂时不要刷新。", "error");
+    });
     return { ok: true, message: "已恢复本地备份，历史模式数据已合并到增长机会工作台。" };
   }
   return (
@@ -2207,7 +2386,7 @@ function SearchRadarTab({
   copy: ModeContent;
   current: FormState;
   updateField: (field: keyof FormState, value: string) => void;
-  onGenerateProfile: () => Promise<AiProfileRunResult>;
+  onGenerateProfile: (onRetry?: AiProfileRetryHandler) => Promise<AiProfileRunResult>;
   onSaveProfile: () => void;
   grokBridge: GrokBridgeState;
   setGrokBridge: Dispatch<SetStateAction<GrokBridgeState>>;
@@ -2306,7 +2485,10 @@ function EngageTab({
   recentProcessedSignals: Signal[];
   signals: Signal[];
 }) {
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   const [engageView, setEngageView] = useState<"queue" | "feedback" | "memory" | "stats">("queue");
+  const [timeRange, setTimeRange] = useState<QueueTimeRangeKey>("today");
   const [priorityFilters, setPriorityFilters] = useState<PriorityFilterKey[]>([]);
   const [processFilters, setProcessFilters] = useState<ProcessFilterKey[]>([]);
   const [feedbackFilters, setFeedbackFilters] = useState<SignalFeedbackStatus[]>([]);
@@ -2323,7 +2505,14 @@ function EngageTab({
   const isEngagedStatus = (status: SignalExecutionStatus) => status === "replied" || status === "quoted";
   const itemStatus = (item: QueueItem) => normalizeExecutionStatus(signalByKey.get(queueItemSignalKey(item))?.status);
   const itemFeedback = (item: QueueItem) => normalizeFeedbackStatus(signalByKey.get(queueItemSignalKey(item))?.feedback);
-  const filteredItems = items.filter((item) => {
+  const itemImportedAt = (item: QueueItem) => {
+    const signal = signalByKey.get(queueItemSignalKey(item));
+    // Legacy text rows are reconstructed as `manual` and may carry the time
+    // they were reloaded or merged, not their real historical import time.
+    return signal && signal.source !== "manual" ? signal.importedAt : undefined;
+  };
+  const timeScopedItems = items.filter((item) => matchesQueueTimeRange(itemImportedAt(item), timeRange));
+  const filteredItems = timeScopedItems.filter((item) => {
     const status = itemStatus(item);
     const feedback = itemFeedback(item);
     const priorityMatched =
@@ -2356,6 +2545,7 @@ function EngageTab({
   const pagedItems = filteredItems.slice(pageStart, pageEnd);
   const queuePageSnapshot = {
     mode,
+    timeRange,
     page: safePage,
     pageSize: 50,
     pageStart: pageStartDisplay,
@@ -2367,35 +2557,44 @@ function EngageTab({
   const queuePageSignature = JSON.stringify(queuePageSnapshot);
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const selectedItems = useMemo(() => pagedItems.filter((item) => selectedKeySet.has(queueItemSignalKey(item))), [pagedItems, selectedKeySet]);
-  const ownAccountItems = useMemo(() => items.filter((item) => signalMatchesOwnAccount(item, ownAccountIdentity)), [items, ownAccountIdentity]);
+  const ownAccountItems = useMemo(() => timeScopedItems.filter((item) => signalMatchesOwnAccount(item, ownAccountIdentity)), [timeScopedItems, ownAccountIdentity]);
   const visibleKeys = pagedItems.map((item) => queueItemSignalKey(item));
   const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every((key) => selectedKeySet.has(key));
   const allItemsSelected = pagedItems.length > 0 && pagedItems.every((item) => selectedKeySet.has(queueItemSignalKey(item)));
   const contextItem = contextMenu ? items.find((item) => queueItemSignalKey(item) === contextMenu.key) : undefined;
   const contextUsesSelection = Boolean(contextMenu && selectedKeySet.has(contextMenu.key) && selectedItems.length > 0);
   const contextActionCount = contextUsesSelection ? selectedItems.length : contextItem ? 1 : selectedItems.length;
+  const unknownTimeCount = items.filter((item) => !itemImportedAt(item)).length;
+  const timeRangeOptions: Array<{ key: QueueTimeRangeKey; label: string; count: number }> = [
+    { key: "today", label: tr("今天", "Today"), count: items.filter((item) => matchesQueueTimeRange(itemImportedAt(item), "today")).length },
+    { key: "yesterday", label: tr("昨天", "Yesterday"), count: items.filter((item) => matchesQueueTimeRange(itemImportedAt(item), "yesterday")).length },
+    { key: "7d", label: tr("近 7 天", "Last 7 days"), count: items.filter((item) => matchesQueueTimeRange(itemImportedAt(item), "7d")).length },
+    { key: "30d", label: tr("近 30 天", "Last 30 days"), count: items.filter((item) => matchesQueueTimeRange(itemImportedAt(item), "30d")).length },
+    { key: "all", label: tr("全部", "All time"), count: items.length },
+  ];
+  const activeTimeRangeLabel = timeRangeOptions.find((option) => option.key === timeRange)?.label ?? tr("今天", "Today");
   const processOptions: Array<FilterOption<ProcessFilterKey>> = [
-    { key: "all", label: "全部", count: items.length },
-    { key: "pending", label: "未处理", count: items.filter((item) => itemStatus(item) === "new").length },
-    { key: "processed", label: "已处理", count: items.filter((item) => itemStatus(item) !== "new").length },
-    { key: "engaged", label: "已互动", count: items.filter((item) => isEngagedStatus(itemStatus(item))).length },
-    { key: "saved", label: "已收藏", count: items.filter((item) => itemStatus(item) === "saved").length },
-    { key: "deferred", label: "搁置", count: items.filter((item) => itemStatus(item) === "deferred").length },
-    { key: "skipped", label: "跳过", count: items.filter((item) => itemStatus(item) === "skipped").length },
+    { key: "all", label: "全部", count: timeScopedItems.length },
+    { key: "pending", label: "未处理", count: timeScopedItems.filter((item) => itemStatus(item) === "new").length },
+    { key: "processed", label: "已处理", count: timeScopedItems.filter((item) => itemStatus(item) !== "new").length },
+    { key: "engaged", label: "已互动", count: timeScopedItems.filter((item) => isEngagedStatus(itemStatus(item))).length },
+    { key: "saved", label: "已收藏", count: timeScopedItems.filter((item) => itemStatus(item) === "saved").length },
+    { key: "deferred", label: "搁置", count: timeScopedItems.filter((item) => itemStatus(item) === "deferred").length },
+    { key: "skipped", label: "跳过", count: timeScopedItems.filter((item) => itemStatus(item) === "skipped").length },
   ];
   const feedbackFilterOptions: Array<FilterOption<SignalFeedbackStatus>> = [
-    { key: "all", label: "全部", count: items.length },
-    { key: "none", label: "未拉取", count: items.filter((item) => itemFeedback(item) === "none").length },
-    { key: "got_reply", label: "有回复", count: items.filter((item) => itemFeedback(item) === "got_reply").length },
-    { key: "no_reply", label: "无回复", count: items.filter((item) => itemFeedback(item) === "no_reply").length },
-    { key: "followed", label: "被关注", count: items.filter((item) => itemFeedback(item) === "followed").length },
-    { key: "reshared", label: "被转发", count: items.filter((item) => itemFeedback(item) === "reshared").length },
+    { key: "all", label: "全部", count: timeScopedItems.length },
+    { key: "none", label: "未拉取", count: timeScopedItems.filter((item) => itemFeedback(item) === "none").length },
+    { key: "got_reply", label: "有回复", count: timeScopedItems.filter((item) => itemFeedback(item) === "got_reply").length },
+    { key: "no_reply", label: "无回复", count: timeScopedItems.filter((item) => itemFeedback(item) === "no_reply").length },
+    { key: "followed", label: "被关注", count: timeScopedItems.filter((item) => itemFeedback(item) === "followed").length },
+    { key: "reshared", label: "被转发", count: timeScopedItems.filter((item) => itemFeedback(item) === "reshared").length },
   ];
   const priorityOptions: Array<FilterOption<PriorityFilterKey>> = [
-    { key: "all", label: "全部", count: items.length },
-    { key: "hot", label: mode === "outbound" ? "高意向" : "立即互动", count: items.filter((item) => item.label === hotLabel).length },
-    { key: "warm", label: mode === "outbound" ? "跟进观察" : "观察", count: items.filter((item) => item.label === warmLabel).length },
-    { key: "low", label: "低评分", count: items.filter((item) => item.label !== hotLabel && item.label !== warmLabel).length },
+    { key: "all", label: "全部", count: timeScopedItems.length },
+    { key: "hot", label: mode === "outbound" ? "高意向" : "立即互动", count: timeScopedItems.filter((item) => item.label === hotLabel).length },
+    { key: "warm", label: mode === "outbound" ? "跟进观察" : "观察", count: timeScopedItems.filter((item) => item.label === warmLabel).length },
+    { key: "low", label: "低评分", count: timeScopedItems.filter((item) => item.label !== hotLabel && item.label !== warmLabel).length },
   ];
   const priorityFilterSignature = priorityFilters.join("|");
   const processFilterSignature = processFilters.join("|");
@@ -2411,7 +2610,7 @@ function EngageTab({
     setQueuePage(1);
     setSelectedKeys([]);
     setExpandedKey("");
-  }, [priorityFilterSignature, processFilterSignature, feedbackFilterSignature, mode]);
+  }, [timeRange, priorityFilterSignature, processFilterSignature, feedbackFilterSignature, mode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2662,8 +2861,44 @@ function EngageTab({
                 <p className="mt-1 text-sm text-white/50">先按处理、反馈和优先级筛选，再对当前页做批量操作。</p>
               </div>
               <div className="rounded-md border border-blue-300/15 bg-blue-400/[0.06] px-3 py-2 text-xs text-blue-100">
-                当前页 {pageStartDisplay}-{pageEnd} / 筛选后 {filteredItems.length} / 全部 {items.length}
+                {activeTimeRangeLabel} {timeScopedItems.length} / 筛选后 {filteredItems.length} / 当前页 {pageStartDisplay}-{pageEnd} / 全部 {items.length}
               </div>
+            </div>
+            <div className="mt-4 rounded-lg border border-white/[0.08] bg-[#0b1118]/70 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex shrink-0 items-center gap-2 text-xs font-black uppercase text-white/45">
+                  <Clock3 className="h-3.5 w-3.5 text-blue-200" />
+                  {tr("时间范围", "Time range")}
+                </div>
+                <div className="hidden h-px flex-1 bg-white/[0.06] sm:block" />
+                <div className="grid flex-1 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                  {timeRangeOptions.map((option) => {
+                    const active = timeRange === option.key;
+                    return (
+                      <Button
+                        key={option.key}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-pressed={active}
+                        onClick={() => setTimeRange(option.key)}
+                        className={cn(
+                          "tech-secondary h-8 justify-between gap-3 rounded-md px-3 transition-all duration-200 sm:justify-center",
+                          active && "!border-blue-300/70 !bg-blue-500/22 !text-white shadow-[0_0_0_1px_rgba(147,197,253,0.35),0_8px_20px_rgba(37,99,235,0.16)]"
+                        )}
+                      >
+                        <span>{option.label}</span>
+                        <span className={cn("rounded px-1.5 py-0.5 text-xs font-black", active ? "bg-blue-100/18 text-blue-50" : "bg-white/[0.06] text-white/40")}>{option.count}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+              {unknownTimeCount > 0 ? (
+                <p className="mt-2 border-t border-white/[0.06] pt-2 text-xs leading-5 text-amber-100/65">
+                  {tr(`${unknownTimeCount} 条历史或手动数据没有可信导入时间，仅计入“全部”。`, `${unknownTimeCount} historical or manual items have no reliable import time and appear only in All time.`)}
+                </p>
+              ) : null}
             </div>
             <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.15fr)_minmax(280px,0.85fr)]">
               <FilterGroup label="处理状态" values={processFilters} options={processOptions} onChange={setProcessFilters} />
@@ -2724,7 +2959,7 @@ function EngageTab({
                 />
               );
             }) : (
-              <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-8 text-center text-sm text-white/45">当前筛选下没有条目，可以放宽处理状态、反馈状态或优先级筛选。</div>
+              <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-8 text-center text-sm text-white/45">当前时间范围或筛选条件下没有条目，可以切换时间范围，或放宽处理状态、反馈状态和优先级筛选。</div>
             )}
           </div>
 
@@ -3329,7 +3564,7 @@ function InputPanel({
   copy: ModeContent;
   current: FormState;
   updateField: (field: keyof FormState, value: string) => void;
-  onGenerateProfile?: () => Promise<AiProfileRunResult>;
+  onGenerateProfile?: (onRetry?: AiProfileRetryHandler) => Promise<AiProfileRunResult>;
   onSaveProfile?: () => void;
 }) {
   const { locale, t } = useI18n();
@@ -3348,15 +3583,23 @@ function InputPanel({
     : copy;
   const [profileState, setProfileState] = useState<"idle" | "loading" | "error">("idle");
   const [profileMessage, setProfileMessage] = useState("");
+  const [profileRetry, setProfileRetry] = useState<AiProfileRetryProgress | null>(null);
 
   async function generateProfile() {
     if (!onGenerateProfile) return;
     setProfileState("loading");
+    setProfileRetry(null);
     setProfileMessage(tr("正在根据 X 主页和当前内容生成定位草稿...", "Generating a positioning draft from the public X profile and current inputs…"));
 
     try {
-      const result = await onGenerateProfile();
+      const result = await onGenerateProfile((progress) => {
+        setProfileRetry(progress);
+        setProfileMessage(locale === "en"
+          ? `Automatic retry ${progress.retryNumber}/${progress.maxRetries} is running. Previous error: ${progress.reason}`
+          : `正在进行第 ${progress.retryNumber}/${progress.maxRetries} 次自动重试。上一次错误：${progress.reason}`);
+      });
       setProfileState("idle");
+      setProfileRetry(null);
       const successMessage = locale === "en"
         ? `A positioning draft from ${result.model} was added to the fields below.${result.profile.reasoning ? ` Basis: ${result.profile.reasoning}` : ""}`
         : `已用 ${result.model} 生成定位草稿，并回填到下面字段。${result.profile.reasoning ? `依据：${result.profile.reasoning}` : ""}`;
@@ -3364,6 +3607,7 @@ function InputPanel({
       showToast(tr("AI 已生成定位草稿。", "AI positioning draft generated."), "success");
     } catch (error) {
       setProfileState("error");
+      setProfileRetry(null);
       const errorMessage = error instanceof Error ? error.message : tr("AI 定位生成失败，请稍后再试。", "AI positioning generation failed. Please try again." );
       setProfileMessage(errorMessage);
       showToast(errorMessage, "error");
@@ -3395,11 +3639,15 @@ function InputPanel({
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
                 <Button type="button" className="bg-[#3B82F6] text-white hover:bg-blue-500" onClick={() => void generateProfile()} disabled={profileState === "loading"}>
-                  {profileState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {tr("AI 帮我生成", "Generate with AI")}
+                  {profileState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {profileRetry
+                    ? tr(`重试 ${profileRetry.retryNumber}/${profileRetry.maxRetries}`, `Retry ${profileRetry.retryNumber}/${profileRetry.maxRetries}`)
+                    : profileState === "loading"
+                      ? tr("生成中...", "Generating…")
+                      : tr("AI 帮我生成", "Generate with AI")}
                 </Button>
                 {onSaveProfile ? (
                   <Button type="button" variant="outline" className="border-blue-200 bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800" onClick={onSaveProfile}>
-                    {tr("保存当前定位", "Save positioning")}
+                    <Database className="h-4 w-4" /> {tr("保存当前定位", "Save positioning")}
                   </Button>
                 ) : null}
               </div>
@@ -3742,6 +3990,7 @@ function GrokBridgePanel({
   const [isProxyConfigReady, setIsProxyConfigReady] = useState(false);
   const [proxyConfig, setProxyConfig] = useState<GrokProxyConfig>(() => normalizeGrokProxyConfig({}) as GrokProxyConfig);
   const [proxySearchResult, setProxySearchResult] = useState<GrokProxySearchResult | null>(null);
+  const [bridgeDiagnosticId, setBridgeDiagnosticId] = useState<number | null>(null);
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const autoKeywords = useMemo(() => deriveGrokKeywords(current), [current]);
   const editableKeywords = keywords.trim() === LEGACY_DEFAULT_KEYWORDS ? "" : keywords;
@@ -3756,6 +4005,15 @@ function GrokBridgePanel({
       ...previous,
       [field]: value,
     }));
+  }
+
+  function showProxyFailure(data: GrokProxyApiResponse, fallback: string, title: string) {
+    const message = grokFailureMessage(data, fallback, locale);
+    setBridgeState("error");
+    setProxySearchResult(null);
+    setBridgeDiagnosticId(data.diagnosticId ?? null);
+    setBridgeMessage(message);
+    showToast({ title, message, tone: "error", durationMs: 7000 });
   }
 
   function loadProxyConfig() {
@@ -3812,7 +4070,7 @@ function GrokBridgePanel({
 
   const existingSignals = useMemo(() => {
     const manualSignals = parseSignalsFromText(current.leadInput, { source: "manual" }) as Signal[];
-    return mergeSignals(manualSignals, modeSignals).signals as Signal[];
+    return mergeSignals(modeSignals, manualSignals).signals as Signal[];
   }, [current.leadInput, modeSignals]);
 
   const grokCandidates = useMemo(() => {
@@ -3863,20 +4121,25 @@ function GrokBridgePanel({
     const apiKey = latestConfig.apiKey.trim();
     const profileUrl = xProfileUrl.trim();
     if (!apiKey) {
-      setBridgeState("error");
-      setProxySearchResult(null);
-      setBridgeMessage("请先到设置页面配置 codeproxy / Grok 密钥，然后再使用竞品洞察分析 X 账号。");
+      showProxyFailure(
+        { message: tr("没有配置 codeproxy / Grok 密钥。", "No codeproxy / Grok API key is configured."), suggestion: tr("请先到设置页面保存密钥。", "Save an API key on the settings page first.") },
+        tr("竞品洞察无法启动。", "Competitor insights could not start."),
+        tr("竞品洞察失败", "Competitor insight failed")
+      );
       return;
     }
     if (!profileUrl) {
-      setBridgeState("error");
-      setProxySearchResult(null);
-      setBridgeMessage("请先填写要分析的竞品、KOL 或目标用户 X 账号，例如 https://x.com/competitor。");
+      showProxyFailure(
+        { message: tr("没有填写要分析的 X 账号。", "No X account was provided."), suggestion: tr("请填写竞品、KOL 或目标用户主页，例如 https://x.com/competitor。", "Enter a competitor, KOL, or target-user profile, such as https://x.com/competitor.") },
+        tr("竞品洞察无法启动。", "Competitor insights could not start."),
+        tr("竞品洞察失败", "Competitor insight failed")
+      );
       return;
     }
 
     setBridgeState("loading");
     setProxySearchResult(null);
+    setBridgeDiagnosticId(null);
     setBridgeMessage("正在分析公开 X 账号，围绕它的受众、评论区和相关讨论生成可互动线索。只会处理公开数据，不会读取私信或后台数据。");
 
     try {
@@ -3895,10 +4158,24 @@ function GrokBridgePanel({
       const data = (await response.json().catch(() => ({ message: "竞品洞察分析失败。" }))) as GrokProxyApiResponse;
 
       if (!response.ok || !data.ok || !data.text) {
-        throw new Error(data.message || "竞品洞察分析失败。");
+        showProxyFailure(data, tr("竞品洞察分析失败。", "Competitor insight analysis failed."), tr("竞品洞察失败", "Competitor insight failed"));
+        return;
       }
 
       const structuredSignals = Array.isArray(data.signals) ? data.signals : [];
+      if (structuredSignals.length === 0) {
+        showProxyFailure(
+          {
+            ...data,
+            message: tr("Grok 返回了内容，但没有解析出任何可导入线索。", "Grok returned content, but no importable signals were parsed."),
+            technicalMessage: data.parseError || data.technicalMessage,
+            suggestion: data.suggestion || tr("请根据日志查看原始响应，并重新查询。", "Review the raw response in the log and retry."),
+          },
+          tr("竞品洞察没有生成可导入线索。", "Competitor insights produced no importable signals."),
+          tr("竞品洞察失败", "Competitor insight failed")
+        );
+        return;
+      }
       updateGrokBridgeField("accountResult", data.text);
       setProxySearchResult({
         text: data.text,
@@ -3915,29 +4192,38 @@ function GrokBridgePanel({
       const usernameLabel = pulledProfile?.username ? ` @${pulledProfile.username}` : "";
       const warningLabel = pulledProfile?.warnings?.length ? ` 有 ${pulledProfile.warnings.length} 个公开数据源未成功，不影响已拿到的数据。` : "";
       setBridgeState("idle");
+      setBridgeDiagnosticId(null);
       const successMessage = `竞品洞察已分析${usernameLabel}，并生成可导入的互动线索。${sourceCount ? `读取 ${sourceCount} 个公开数据源。` : ""}请确认预览结果，再导入互动队列。${warningLabel}`;
       setBridgeMessage(successMessage);
-      showToast("竞品洞察分析完成。", "success");
+      showToast(tr(`竞品洞察分析完成，已解析 ${structuredSignals.length} 条线索。`, `Competitor insight complete with ${structuredSignals.length} parsed signals.`), "success");
     } catch (error) {
-      setBridgeState("error");
-      setProxySearchResult(null);
-      const errorMessage = error instanceof Error ? error.message : "竞品洞察分析失败。";
-      setBridgeMessage(errorMessage);
-      showToast(errorMessage, "error");
+      const technicalMessage = error instanceof Error ? `${error.name}: ${error.message}` : String(error || "Unknown browser error");
+      showProxyFailure(
+        {
+          message: tr("页面无法连接本机 Grok 接口。", "The page could not reach the local Grok API."),
+          technicalMessage,
+          suggestion: tr("请确认本地服务仍在运行，然后重试。此错误发生在浏览器到本机服务之间，因此没有服务端日志编号。", "Confirm the local service is still running and retry. This failed before reaching the server, so there is no server log ID."),
+        },
+        tr("竞品洞察分析失败。", "Competitor insight analysis failed."),
+        tr("竞品洞察失败", "Competitor insight failed")
+      );
     }
   }
   async function searchViaProxy() {
     const latestConfig = loadProxyConfig();
     const apiKey = latestConfig.apiKey.trim();
     if (!apiKey) {
-      setBridgeState("error");
-      setProxySearchResult(null);
-      setBridgeMessage("请先到设置页面配置 codeproxy / Grok 密钥，然后再发起中转查询。");
+      showProxyFailure(
+        { message: tr("没有配置 codeproxy / Grok 密钥。", "No codeproxy / Grok API key is configured."), suggestion: tr("请先到设置页面保存密钥。", "Save an API key on the settings page first.") },
+        tr("自动查询无法启动。", "The automatic query could not start."),
+        tr("自动查询失败", "Automatic query failed")
+      );
       return;
     }
 
     setBridgeState("loading");
     setProxySearchResult(null);
+    setBridgeDiagnosticId(null);
     setBridgeMessage("Grok 查询中，请稍等。正在通过 codeproxy.dev 获取候选信号。");
 
     try {
@@ -3955,10 +4241,24 @@ function GrokBridgePanel({
       const data = (await response.json().catch(() => ({ message: "中转查询失败。" }))) as GrokProxyApiResponse;
 
       if (!response.ok || !data.ok || !data.text) {
-        throw new Error(data.message || "中转查询失败。");
+        showProxyFailure(data, tr("中转查询失败。", "The proxy query failed."), tr("自动查询失败", "Automatic query failed"));
+        return;
       }
 
       const structuredSignals = Array.isArray(data.signals) ? data.signals : [];
+      if (structuredSignals.length === 0) {
+        showProxyFailure(
+          {
+            ...data,
+            message: tr("Grok 返回了内容，但没有解析出任何可导入线索。", "Grok returned content, but no importable signals were parsed."),
+            technicalMessage: data.parseError || data.technicalMessage,
+            suggestion: data.suggestion || tr("请根据日志查看原始响应，并重新查询。", "Review the raw response in the log and retry."),
+          },
+          tr("自动查询没有生成可导入线索。", "The automatic query produced no importable signals."),
+          tr("自动查询失败", "Automatic query failed")
+        );
+        return;
+      }
       updateGrokBridgeField("grokResult", data.text);
       setProxySearchResult({
         text: data.text,
@@ -3971,14 +4271,20 @@ function GrokBridgePanel({
         accountRadar: data.accountRadar ?? null,
       });
       setBridgeState("idle");
-      setBridgeMessage("查询完成。请先确认预览结果，再决定是否导入互动队列。");
-      showToast("Grok 查询完成。", "success");
+      setBridgeDiagnosticId(null);
+      setBridgeMessage(tr(`查询完成，已解析 ${structuredSignals.length} 条候选线索。请确认后再导入互动队列。`, `Query complete with ${structuredSignals.length} parsed signals. Review them before importing.`));
+      showToast(tr(`Grok 查询完成，已解析 ${structuredSignals.length} 条线索。`, `Grok query complete with ${structuredSignals.length} parsed signals.`), "success");
     } catch (error) {
-      setBridgeState("error");
-      setProxySearchResult(null);
-      const errorMessage = error instanceof Error ? error.message : "中转查询失败。";
-      setBridgeMessage(errorMessage);
-      showToast(errorMessage, "error");
+      const technicalMessage = error instanceof Error ? `${error.name}: ${error.message}` : String(error || "Unknown browser error");
+      showProxyFailure(
+        {
+          message: tr("页面无法连接本机 Grok 接口。", "The page could not reach the local Grok API."),
+          technicalMessage,
+          suggestion: tr("请确认本地服务仍在运行，然后重试。此错误发生在浏览器到本机服务之间，因此没有服务端日志编号。", "Confirm the local service is still running and retry. This failed before reaching the server, so there is no server log ID."),
+        },
+        tr("中转查询失败。", "The proxy query failed."),
+        tr("自动查询失败", "Automatic query failed")
+      );
     }
   }
 
@@ -3994,6 +4300,7 @@ function GrokBridgePanel({
     if (candidates.length === 0) {
       setBridgeState("error");
       setBridgeMessage("没有解析到可导入的结果。建议让 Grok 按「X | 作者 | 链接 | 摘要」格式返回，每条一行。");
+      showToast(tr("没有解析到可导入结果，未执行导入。", "No importable results were parsed, so nothing was imported."), "error");
       return;
     }
 
@@ -4044,7 +4351,7 @@ function GrokBridgePanel({
                 placeholder="https://x.com/competitor_or_kol"
                 className="h-10 border-white/[0.08] bg-white/[0.04] text-white placeholder:text-white/35"
               />
-              <Button className="tech-cta h-10" onClick={() => void pullXProfileViaProxy()} disabled={bridgeState === "loading"}>
+              <Button type="button" className="tech-cta h-10" onClick={() => void pullXProfileViaProxy()} disabled={bridgeState === "loading"}>
                 {bridgeState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                 {tr("分析账号并生成线索", "Analyze account and generate signals")}
               </Button>
@@ -4103,7 +4410,7 @@ function GrokBridgePanel({
                   <ArrowRight className="h-3 w-3 text-white/25" />
                   <span className="rounded-md bg-white/[0.05] px-2 py-1">{tr("3 粘贴结果", "3 Paste results")}</span>
                 </div>
-                <Button variant="outline" className="tech-secondary mt-auto w-full justify-center" onClick={() => openGrok(true)} disabled={bridgeState === "loading"}>
+                <Button type="button" variant="outline" className="tech-secondary mt-auto w-full justify-center" onClick={() => openGrok(true)} disabled={bridgeState === "loading"}>
                   <Copy className="h-4 w-4" /> {tr("复制 Prompt 并打开 Grok", "Copy prompt and open Grok")}
                 </Button>
               </div>
@@ -4136,7 +4443,7 @@ function GrokBridgePanel({
                       <Settings className="h-4 w-4" /> {tr("配置中转", "Configure proxy")}
                     </Link>
                   </Button>
-                  <Button className="tech-cta" onClick={() => void searchViaProxy()} disabled={bridgeState === "loading"}>
+                  <Button type="button" className="tech-cta" onClick={() => void searchViaProxy()} disabled={bridgeState === "loading"}>
                     {bridgeState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                     {bridgeState === "loading" ? tr("自动查询中", "Querying…") : tr("一键自动查询", "Run automatic query")}
                   </Button>
@@ -4195,10 +4502,10 @@ function GrokBridgePanel({
                 {!proxySearchResult.structured && proxySearchResult.parseError ? <p className="mt-1 text-xs text-amber-200/70">JSON 解析未命中，已自动回退到文本解析。</p> : null}
               </div>
               <div className="flex flex-col gap-2 sm:flex-row lg:shrink-0">
-                <Button variant="outline" className="tech-secondary" onClick={() => setProxySearchResult(null)}>
+                <Button type="button" variant="outline" className="tech-secondary" onClick={() => setProxySearchResult(null)}>
                   暂不导入
                 </Button>
-                <Button className="tech-cta" onClick={importGrokResult} disabled={importPreview.importableCount === 0}>
+                <Button type="button" className="tech-cta" onClick={importGrokResult} disabled={importPreview.importableCount === 0}>
                   <Upload className="h-4 w-4" /> 导入结果
                 </Button>
               </div>
@@ -4239,7 +4546,7 @@ function GrokBridgePanel({
                 <p className="mt-1 text-xs leading-5 text-white/40">根据左侧定位自动生成，默认收起。</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="ghost" size="sm" className="text-white/70 hover:bg-white/[0.06] hover:text-white" onClick={() => copyText(prompt)}>
+                <Button type="button" variant="ghost" size="sm" className="text-white/70 hover:bg-white/[0.06] hover:text-white" onClick={() => copyText(prompt)}>
                   <Copy className="h-4 w-4" /> 复制
                 </Button>
                 <Button type="button" variant="outline" size="sm" className="tech-secondary" onClick={() => setIsPromptOpen((value) => !value)}>
@@ -4272,7 +4579,7 @@ function GrokBridgePanel({
           <div className="grid gap-2">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-xs font-bold uppercase text-white/45">{isAccountRadar ? "竞品洞察线索" : "Grok 结果"}</Label>
-              <Button variant="outline" size="sm" className="tech-secondary" onClick={importGrokResult} disabled={bridgeState === "loading"}>
+              <Button type="button" variant="outline" size="sm" className="tech-secondary" onClick={importGrokResult} disabled={bridgeState === "loading"}>
                 导入结果
               </Button>
             </div>
@@ -4289,7 +4596,19 @@ function GrokBridgePanel({
           </div>
         </div>
 
-        <p className={cn("rounded-md border px-3 py-2 text-xs leading-5", bridgeState === "error" ? "border-rose-400/20 bg-rose-500/10 text-rose-200" : "border-white/[0.08] bg-white/[0.03] text-white/55")}>{bridgeMessage}</p>
+        <div className={cn("rounded-md border px-3 py-2 text-xs leading-5", bridgeState === "error" ? "border-rose-400/20 bg-rose-500/10 text-rose-200" : "border-white/[0.08] bg-white/[0.03] text-white/55")}>
+          <p>{bridgeMessage}</p>
+          {bridgeState === "error" && bridgeDiagnosticId ? (
+            <a
+              href={`/api/diagnostics/grok?id=${bridgeDiagnosticId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-rose-200/20 bg-rose-100/[0.06] px-2.5 py-1 font-semibold text-rose-100 transition-colors hover:bg-rose-100/[0.12]"
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> {tr(`查看完整日志 #${bridgeDiagnosticId}`, `View full log #${bridgeDiagnosticId}`)}
+            </a>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );
@@ -5135,11 +5454,19 @@ function ExecutionControls({
   const primaryDraft = mode === "outbound" ? (item as OutboundLead).draft : (item as GrowthOpportunity).replyDraft;
   const usedDraftTime = formatProcessedAt(signal?.usedDraftAt);
   const copyLabel = mode === "outbound" ? "复制触达" : "复制回复";
+  const copyAndOpenLabel = mode === "outbound" ? "复制触达并打开原帖" : "复制回复并打开原帖";
   const [usedDraftInput, setUsedDraftInput] = useState(signal?.usedDraft || primaryDraft);
+  const draftForExecution = usedDraftInput.trim() || primaryDraft;
+  const copyAndOpenMessage = mode === "outbound" ? "已保存并复制实际触达话术，正在打开原帖。" : "已保存并复制实际回复，正在打开原帖。";
 
   useEffect(() => {
     setUsedDraftInput(signal?.usedDraft || primaryDraft);
   }, [signal?.usedDraft, primaryDraft]);
+
+  function copyDraftAndOpenSource() {
+    if (draftForExecution) onUsedDraftChange(draftForExecution);
+    copyText(draftForExecution, copyAndOpenMessage);
+  }
 
   return (
     <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
@@ -5151,14 +5478,21 @@ function ExecutionControls({
         <div className="flex flex-wrap gap-2">
           {sourceUrl ? (
             <Button asChild variant="outline" size="sm" className="tech-secondary h-8">
-              <a href={sourceUrl} target="_blank" rel="noreferrer">
-                <ExternalLink className="h-3.5 w-3.5" /> 打开原帖
+              <a
+                href={sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                data-ray-used-draft={draftForExecution}
+                onClick={copyDraftAndOpenSource}
+              >
+                <Copy className="h-3.5 w-3.5" /> {copyAndOpenLabel} <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </Button>
-          ) : null}
-          <Button variant="outline" size="sm" className="tech-secondary h-8" onClick={() => copyText(primaryDraft)}>
-            <Copy className="h-3.5 w-3.5" /> {copyLabel}
-          </Button>
+          ) : (
+            <Button variant="outline" size="sm" className="tech-secondary h-8" onClick={() => copyText(primaryDraft)}>
+              <Copy className="h-3.5 w-3.5" /> {copyLabel}
+            </Button>
+          )}
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">

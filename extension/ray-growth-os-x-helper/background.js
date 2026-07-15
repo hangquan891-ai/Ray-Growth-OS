@@ -199,28 +199,48 @@ function chooseOwnReply(articles, item) {
   return candidates[candidates.length - 1] || null;
 }
 
-function buildUpdate(item, article, source) {
+function buildUpdate(item, article, source, options = {}) {
   const classified = classifyMetrics(article.metrics);
   const now = new Date().toISOString();
+  const captureOnly = Boolean(options.captureOnly);
   return {
     itemId: signalKey(item),
     mode: item.mode,
     sourceUrl: item.sourceUrl || item.url,
     replyUrl: article.url,
     replyUrlAt: item.replyUrlAt || now,
-    feedback: classified.feedback,
-    feedbackAt: now,
-    feedbackReason: classified.reason,
+    feedback: captureOnly ? "none" : classified.feedback,
+    feedbackAt: captureOnly ? "" : now,
+    feedbackReason: captureOnly ? "已保存公开回复链接，等待后续巡检反馈。" : classified.reason,
     metrics: article.metrics || {},
     source,
   };
 }
 
 async function saveUpdate(update) {
-  const stored = await storageGet(["rayUpdates"]);
+  const stored = await storageGet(["rayUpdates", "rayQueue"]);
   const updates = stored.rayUpdates || {};
   updates[update.itemId] = { ...(updates[update.itemId] || {}), ...update };
-  await storageSet({ rayUpdates: updates });
+  const queue = Array.isArray(stored.rayQueue) ? stored.rayQueue : [];
+  const nextQueue = queue.map((item) => {
+    if (signalKey(item) !== update.itemId && !sameStatusUrl(item.sourceUrl || item.url, update.sourceUrl)) return item;
+    const next = {
+      ...item,
+      replyUrl: update.replyUrl || item.replyUrl || "",
+      replyUrlAt: update.replyUrlAt || item.replyUrlAt || "",
+    };
+    if (update.replyUrl) {
+      next.status = "replied";
+      next.processedAction = "replied";
+      next.processedAt = update.replyUrlAt || item.processedAt || new Date().toISOString();
+    }
+    if (update.feedback && update.feedback !== "none") {
+      next.feedback = update.feedback;
+      next.feedbackAt = update.feedbackAt || item.feedbackAt || new Date().toISOString();
+    }
+    return next;
+  });
+  await storageSet({ rayUpdates: updates, rayQueue: nextQueue });
   return update;
 }
 
@@ -253,7 +273,7 @@ async function rememberSourceFromApp(item, url) {
 }
 
 function shouldCaptureFreshReply(scan) {
-  return scan?.trigger === "reply-click";
+  return ["reply-click", "manual", "auto"].includes(clean(scan?.trigger));
 }
 
 async function processScan(scan, tabId) {
@@ -287,9 +307,9 @@ async function processScan(scan, tabId) {
 
   const pending = tabId ? pendingByTab[String(tabId)] : null;
   const pendingItem = pending ? findQueueItemByKey(queue, pending.itemId) : null;
-  if (pendingItem && shouldCaptureFreshReply(scan)) {
+  if (pendingItem && !normalizeUrl(pendingItem.replyUrl) && shouldCaptureFreshReply(scan)) {
     const ownReply = chooseOwnReply(ownArticles, pendingItem);
-    if (ownReply) updates.push(await saveUpdate(buildUpdate(pendingItem, ownReply, "x-reply-after-post")));
+    if (ownReply) updates.push(await saveUpdate(buildUpdate(pendingItem, ownReply, "x-reply-after-post", { captureOnly: true })));
   }
 
   for (const item of queue) {
@@ -306,7 +326,7 @@ async function processScan(scan, tabId) {
     : updates.length
       ? `已识别 ${updates.length} 条回复/反馈，但 App 页面暂时没连上，已先暂存。`
       : sourceMatch
-        ? "已关联当前原帖。等你在 X 点回复发布后，插件会自动扫描。"
+        ? `已关联当前原帖，但还没有识别到 @${selfUsername} 的公开回复。回复发布并显示在当前对话页后，可点“找回当前页回复并回写”。`
         : "当前 X 页面没有匹配到队列条目。";
 
   return {
@@ -469,6 +489,9 @@ async function applyUpdatesToApp(options = {}) {
   if (!updates.length) return { ok: true, appliedCount: 0, message: "没有可回写的反馈。" };
   const response = await sendToTabWithInjection(tab, { type: "RAY_APPLY_FEEDBACK_UPDATES", updates }, "app-bridge.js");
   if (!response?.ok) throw new Error(response?.message || "回写 App 失败。请刷新 App 页面后重试。");
+  if (Number(response.appliedCount || 0) === 0) {
+    throw new Error("App 没有匹配到待回写的队列条目，反馈仍保留在插件中。请先从 App 重新读取队列后再回写。");
+  }
   await storageRemove("rayUpdates");
   return {
     ...response,

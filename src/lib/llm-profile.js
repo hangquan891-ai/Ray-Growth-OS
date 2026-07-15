@@ -157,9 +157,13 @@
 
   function buildOpenAiProfileRequestBody({ model, payload }) {
     const safePayload = buildProfileRequestInput(payload || {});
+    const normalizedModel = clean(model) || "gpt-5.5";
+    const isGpt55 = /^gpt-5\.5(?:$|-)/i.test(normalizedModel);
 
     return {
-      model: clean(model) || "gpt-5.5",
+      model: normalizedModel,
+      max_output_tokens: 2400,
+      ...(isGpt55 ? { reasoning: { effort: "none" } } : {}),
       input: [
         {
           role: "system",

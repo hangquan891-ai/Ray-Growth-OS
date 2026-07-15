@@ -1,9 +1,13 @@
 {
     "scripts": {
-        "dev": "next dev -p 3001",
+        "dev": "next dev -H 127.0.0.1 -p 3001",
         "build": "next build",
+        "start": "next start -H 127.0.0.1 -p 3001",
         "test": "node --test test/*.test.mjs",
         "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+    },
+    "engines": {
+        "node": ">=22.5.0"
     },
     "dependencies": {
         "@radix-ui/react-slot": "latest",

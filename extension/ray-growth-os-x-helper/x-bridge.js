@@ -86,7 +86,10 @@
       seen.add(link.statusId);
       unique.push(link);
     }
-    return unique[unique.length - 1] || unique[0];
+    // X articles can embed quoted posts with their own /status/ links. The
+    // first unique status belongs to the outer article; choosing the last one
+    // can accidentally identify the quoted post instead of the source/reply.
+    return unique[0] || null;
   }
 
   function readArticles() {

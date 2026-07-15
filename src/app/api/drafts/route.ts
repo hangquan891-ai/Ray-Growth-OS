@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { AI_DRAFT_LIMIT, buildOpenAiDraftRequestBody, normalizeAiDraftResponse } from "@/lib/llm-drafts";
 import { extractResponseOutputText } from "@/lib/llm-scoring";
+import { recordAiDiagnostic } from "@/lib/local-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +45,15 @@ function errorMessage(value: unknown, fallback: string) {
   return fallback;
 }
 
+function saveDiagnostic(input: Parameters<typeof recordAiDiagnostic>[0]) {
+  try {
+    return recordAiDiagnostic(input);
+  } catch (error) {
+    console.error("Could not save AI draft diagnostic.", error);
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   let body: DraftRequest;
 
@@ -73,11 +83,26 @@ export async function POST(request: Request) {
   }
 
   const model = String(body.model ?? "").trim() || process.env.CODEPROXY_DRAFT_MODEL?.trim() || process.env.CODEPROXY_AI_MODEL?.trim() || "gpt-5.5";
+  const upstreamRequest = buildOpenAiDraftRequestBody({
+    model,
+    payload: {
+      mode,
+      locale: body.locale,
+      profile: body.profile,
+      styleGuide: body.styleGuide,
+      styleSamples: body.styleSamples,
+      growthMemory: body.growthMemory,
+      items,
+    },
+  });
+  const requestBody = JSON.stringify(upstreamRequest);
+  const startedAt = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), AI_DRAFT_TIMEOUT_MS);
 
   let response: Response;
-  let responseJson: unknown;
+  let responseJson: unknown = {};
+  let responseBody = "";
 
   try {
     response = await fetch("https://codeproxy.dev/v1/responses", {
@@ -86,31 +111,43 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(
-        buildOpenAiDraftRequestBody({
-          model,
-          payload: {
-            mode,
-            locale: body.locale,
-            profile: body.profile,
-            styleGuide: body.styleGuide,
-            styleSamples: body.styleSamples,
-            growthMemory: body.growthMemory,
-            items,
-          },
-        })
-      ),
+      body: requestBody,
       signal: controller.signal,
     });
-    responseJson = await response.json().catch(() => ({}));
+    responseBody = await response.text();
+    if (responseBody.trim()) {
+      try {
+        responseJson = JSON.parse(responseBody) as unknown;
+      } catch {}
+    }
   } catch (error) {
-    clearTimeout(timeout);
+    const message = requestFailureMessage(error);
+    const diagnostic = saveDiagnostic({
+      action: "draft",
+      durationMs: Date.now() - startedAt,
+      httpStatus: null,
+      model,
+      outcome: isAbortError(error) ? "timeout" : "request_failed",
+      requestBody,
+      responseBody,
+      responseShape: {
+        request: {
+          url: "https://codeproxy.dev/v1/responses",
+          method: "POST",
+          headers: { authorization: "[REDACTED]", "content-type": "application/json" },
+          timeoutMs: AI_DRAFT_TIMEOUT_MS,
+        },
+        response: null,
+      },
+      errorMessage: message,
+    });
     return NextResponse.json(
       {
         ok: false,
         configured: true,
         status: "request_failed",
-        message: requestFailureMessage(error),
+        diagnosticId: diagnostic?.id,
+        message,
       },
       { status: 502 }
     );
@@ -118,13 +155,40 @@ export async function POST(request: Request) {
     clearTimeout(timeout);
   }
 
+  const responseShape = {
+    request: {
+      url: "https://codeproxy.dev/v1/responses",
+      method: "POST",
+      headers: { authorization: "[REDACTED]", "content-type": "application/json" },
+      timeoutMs: AI_DRAFT_TIMEOUT_MS,
+    },
+    response: {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+    },
+  };
+
   if (!response.ok) {
+    const message = errorMessage(responseJson, "codeproxy GPT-5.5 草稿生成接口返回错误。");
+    const diagnostic = saveDiagnostic({
+      action: "draft",
+      durationMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      model,
+      outcome: "provider_error",
+      requestBody,
+      responseBody,
+      responseShape,
+      errorMessage: message,
+    });
     return NextResponse.json(
       {
         ok: false,
         configured: true,
         status: "codeproxy_error",
-        message: errorMessage(responseJson, "codeproxy GPT-5.5 草稿生成接口返回错误。"),
+        diagnosticId: diagnostic?.id,
+        message,
       },
       { status: response.status }
     );
@@ -132,12 +196,25 @@ export async function POST(request: Request) {
 
   const outputText = extractResponseOutputText(responseJson);
   if (!outputText) {
+    const message = "AI 草稿生成没有返回可解析结果，已保留本地规则草稿。";
+    const diagnostic = saveDiagnostic({
+      action: "draft",
+      durationMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      model,
+      outcome: "empty_output",
+      requestBody,
+      responseBody,
+      responseShape,
+      errorMessage: message,
+    });
     return NextResponse.json(
       {
         ok: false,
         configured: true,
         status: "empty_output",
-        message: "AI 草稿生成没有返回可解析结果，已保留本地规则草稿。",
+        diagnosticId: diagnostic?.id,
+        message,
       },
       { status: 502 }
     );
@@ -145,19 +222,43 @@ export async function POST(request: Request) {
 
   try {
     const normalized = normalizeAiDraftResponse(JSON.parse(outputText), mode);
+    const diagnostic = saveDiagnostic({
+      action: "draft",
+      durationMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      model,
+      outcome: "success",
+      requestBody,
+      responseBody,
+      responseShape,
+    });
     return NextResponse.json({
       ok: true,
       configured: true,
+      diagnosticId: diagnostic?.id,
       model,
       drafts: normalized.drafts,
     });
   } catch {
+    const message = "AI 草稿生成返回内容不是有效 JSON，已保留本地规则草稿。";
+    const diagnostic = saveDiagnostic({
+      action: "draft",
+      durationMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      model,
+      outcome: "invalid_output",
+      requestBody,
+      responseBody,
+      responseShape,
+      errorMessage: message,
+    });
     return NextResponse.json(
       {
         ok: false,
         configured: true,
         status: "invalid_output",
-        message: "AI 草稿生成返回内容不是有效 JSON，已保留本地规则草稿。",
+        diagnosticId: diagnostic?.id,
+        message,
       },
       { status: 502 }
     );

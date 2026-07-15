@@ -386,6 +386,9 @@
 
     for (const signal of existingSignals ?? []) {
       const normalized = createSignal(signal);
+      // Existing legacy records may not have an import timestamp. Do not turn
+      // the current merge time into a fake historical import time.
+      if (!clean(signal?.importedAt)) normalized.importedAt = "";
       const key = signalDedupKey(normalized);
       if (!seen.has(key)) {
         seen.add(key);

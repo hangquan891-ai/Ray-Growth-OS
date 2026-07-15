@@ -71,11 +71,11 @@ $("#syncApp").addEventListener("click", () => {
 });
 
 $("#scanX").addEventListener("click", () => {
-  void runAction("手动补扫当前 X 页面", () => send({ type: "POPUP_SCAN_X" }));
+  void runAction("找回当前页回复并回写", () => send({ type: "POPUP_SCAN_X" }));
 });
 
 $("#refreshReplies").addEventListener("click", () => {
-  void runAction("巡检已保存回复链接", () => send({ type: "POPUP_REFRESH_REPLIES" }));
+  void runAction("巡检已记录的回复链接", () => send({ type: "POPUP_REFRESH_REPLIES" }));
 });
 
 $("#applyApp").addEventListener("click", () => {

@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 
 const {
   CURRENT_VERSION,
+  createOperationalWorkbenchSnapshot,
   DEFAULT_GROK_BRIDGE_STATE,
   DEFAULT_GROWTH_MEMORY_STATE,
   normalizeWorkbenchState,
@@ -88,6 +89,36 @@ test("serializeWorkbenchState writes a versioned restorable snapshot", () => {
   assert.equal(parsed.grokBridge.keywords, "Cursor alternative");
   assert.equal(parsed.grokBridge.accountResult, "X | competitor follower | https://x.com/f/status/1 | asks about first users");
   assert.equal(parsed.grokBridge.xProfileUrl, "@cursor");
+});
+
+test("operational autosave keeps saved positioning but persists imported queue input", () => {
+  const savedForms = {
+    outbound: { ...fallbackForms.outbound, productName: "Saved outbound", leadInput: "old outbound queue" },
+    growth: { ...fallbackForms.growth, productName: "Saved growth", description: "Saved positioning", leadInput: "old growth queue" },
+  };
+  const currentForms = {
+    outbound: { ...savedForms.outbound, productName: "Unsaved outbound edit", leadInput: "new outbound queue" },
+    growth: { ...savedForms.growth, productName: "Unsaved growth edit", description: "Unsaved positioning", leadInput: "new growth queue" },
+  };
+
+  const snapshot = createOperationalWorkbenchSnapshot(
+    {
+      mode: "growth",
+      forms: currentForms,
+      signals: {
+        outbound: [],
+        growth: [{ id: "signal-1", source: "grok", platform: "X", author: "Maker", url: "https://x.com/maker/status/1", text: "needs help", importedAt: "2026-07-15T01:00:00.000Z", status: "new", tags: [] }],
+      },
+    },
+    savedForms
+  );
+
+  assert.equal(snapshot.forms.growth.productName, "Saved growth");
+  assert.equal(snapshot.forms.growth.description, "Saved positioning");
+  assert.equal(snapshot.forms.growth.leadInput, "new growth queue");
+  assert.equal(snapshot.forms.outbound.productName, "Saved outbound");
+  assert.equal(snapshot.forms.outbound.leadInput, "new outbound queue");
+  assert.equal(snapshot.signals.growth.length, 1);
 });
 
 test("normalizeWorkbenchState keeps structured signals by mode", () => {

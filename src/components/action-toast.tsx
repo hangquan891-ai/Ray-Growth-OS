@@ -16,7 +16,7 @@ type ActionToastDetail = {
 
 const ACTION_TOAST_EVENT = "ray-growth-os:action-toast";
 
-export function showToast(detail: string | ActionToastDetail, tone: ActionToastTone = "success") {
+export function showToast(detail: string | ActionToastDetail, tone: ActionToastTone = "info") {
   if (typeof window === "undefined") return;
   const payload = typeof detail === "string" ? { message: detail, tone } : detail;
   window.dispatchEvent(new CustomEvent<ActionToastDetail>(ACTION_TOAST_EVENT, { detail: payload }));
@@ -62,7 +62,7 @@ export function ActionToastHost() {
         window.clearTimeout(timerRef.current);
       }
 
-      const nextToast = { tone: "success" as ActionToastTone, ...detail };
+      const nextToast = { tone: "info" as ActionToastTone, ...detail };
       setToast(nextToast);
       timerRef.current = window.setTimeout(() => setToast(null), nextToast.durationMs ?? 2600);
     }

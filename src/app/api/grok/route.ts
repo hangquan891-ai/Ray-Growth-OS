@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { buildCodeProxyMessageRequest, buildStructuredGrokSignalPrompt, buildXProfilePullPrompt, extractCodeProxyMessageText, extractXUsername } from "@/lib/codeproxy-grok";
 import { formatSignalsAsLeadInput, parseStructuredSignalsFromText } from "@/lib/signals";
 import { openGrokBridge } from "@/lib/grok-bridge";
+import { classifyGrokRequestFailure } from "@/lib/grok-diagnostics";
+import { recordAiDiagnostic } from "@/lib/local-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +17,69 @@ type GrokRequest = {
   prompt?: string;
   profileUrl?: string;
 };
+
+const GROK_PROXY_TIMEOUT_MS = 60000;
+
+function saveGrokDiagnostic(input: Parameters<typeof recordAiDiagnostic>[0]) {
+  try {
+    const diagnostic = recordAiDiagnostic(input);
+    const log = {
+      id: diagnostic.id,
+      action: input.action,
+      durationMs: input.durationMs,
+      httpStatus: input.httpStatus ?? null,
+      model: input.model,
+      outcome: input.outcome,
+      errorMessage: input.errorMessage || "",
+    };
+    if (input.outcome === "success") console.info("[grok-diagnostic]", log);
+    else console.error("[grok-diagnostic]", log);
+    return diagnostic;
+  } catch (error) {
+    console.error("Could not save Grok diagnostic.", error);
+    return null;
+  }
+}
+
+function responseMetadata(response: Response) {
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+  };
+}
+
+function providerFailureDetails(status: number, providerMessage: string, locale?: "zh-CN" | "en") {
+  const english = locale === "en";
+  if (status === 401 || status === 403) {
+    return {
+      message: english ? `codeproxy rejected the credentials (HTTP ${status}).` : `codeproxy 拒绝了当前密钥或权限（HTTP ${status}）。`,
+      suggestion: english ? "Check the API key, account permissions, and whether the selected model is available." : "请检查 API 密钥、账号权限，以及当前账号是否能使用所选模型。",
+    };
+  }
+  if (status === 404) {
+    return {
+      message: english ? "The codeproxy endpoint or selected model was not found (HTTP 404)." : "codeproxy 没有找到当前接口或所选模型（HTTP 404）。",
+      suggestion: english ? "Check the configured model name and proxy service compatibility." : "请检查设置中的模型名称，以及中转服务是否支持该接口。",
+    };
+  }
+  if (status === 429) {
+    return {
+      message: english ? "codeproxy rate-limited the request or the account has insufficient quota (HTTP 429)." : "codeproxy 对请求进行了限流，或当前账号额度不足（HTTP 429）。",
+      suggestion: english ? "Wait before retrying and check account quota." : "请稍后重试，并检查中转账号额度。",
+    };
+  }
+  if (status >= 500) {
+    return {
+      message: english ? `codeproxy returned a server error (HTTP ${status}).` : `codeproxy 返回了服务端错误（HTTP ${status}）。`,
+      suggestion: english ? "The upstream service may be temporarily unavailable. Retry later and use the log ID if it persists." : "上游服务可能暂时不可用；稍后重试，若持续失败请根据日志编号排查。",
+    };
+  }
+  return {
+    message: english ? `codeproxy returned HTTP ${status}: ${providerMessage}` : `codeproxy 返回 HTTP ${status}：${providerMessage}`,
+    suggestion: english ? "Review the full response in the diagnostic log." : "请在完整诊断日志中查看上游原始响应。",
+  };
+}
 
 function apiErrorMessage(value: unknown, fallback: string) {
   if (value && typeof value === "object") {
@@ -219,13 +284,30 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: false, status: "error", message: "请先填写要分析的竞品、KOL 或目标用户 X 账号。" }, { status: 400 });
       }
 
+      const profileFetchStartedAt = Date.now();
       pulledProfile = await fetchPublicXProfileSnapshot(profileUrl);
       if (!pulledProfile.text) {
+        const technicalMessage = pulledProfile.warnings.join(" | ") || "Public X profile sources returned no readable content.";
+        const diagnostic = saveGrokDiagnostic({
+          action: "grok",
+          durationMs: Date.now() - profileFetchStartedAt,
+          httpStatus: null,
+          model,
+          outcome: "profile_fetch_failed",
+          requestBody: JSON.stringify({ action: body.action, model, profileUrl, prompt }),
+          responseBody: "",
+          responseShape: { pulledProfile },
+          errorMessage: technicalMessage,
+        });
         return NextResponse.json(
           {
             ok: false,
             status: "profile_fetch_failed",
+            diagnosticId: diagnostic?.id,
             message: "竞品洞察没有读取到可用的公开 X 数据。请检查账号地址是否正确，或稍后再试。",
+            technicalMessage,
+            suggestion: "请确认账号是公开账号且地址正确；完整的公开数据源失败原因已写入本机日志。",
+            retryable: true,
             pulledProfile,
           },
           { status: 502 }
@@ -241,10 +323,13 @@ export async function POST(request: Request) {
 
     const structuredPrompt = buildStructuredGrokSignalPrompt(prompt, body.locale);
     const proxyRequest = buildCodeProxyMessageRequest({ prompt: structuredPrompt, model });
+    const requestBody = JSON.stringify(proxyRequest.body);
+    const startedAt = Date.now();
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    const timeout = setTimeout(() => controller.abort(), GROK_PROXY_TIMEOUT_MS);
     let response: Response;
-    let responseJson: unknown;
+    let responseJson: unknown = {};
+    let responseBody = "";
 
     try {
       response = await fetch(proxyRequest.url, {
@@ -253,30 +338,86 @@ export async function POST(request: Request) {
           ...proxyRequest.headers,
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify(proxyRequest.body),
+        body: requestBody,
         signal: controller.signal,
       });
-      responseJson = await response.json().catch(() => ({}));
+      responseBody = await response.text();
+      if (responseBody.trim()) {
+        try {
+          responseJson = JSON.parse(responseBody) as unknown;
+        } catch {}
+      }
     } catch (error) {
-      clearTimeout(timeout);
+      const failure = classifyGrokRequestFailure(error, { locale: body.locale, timeoutMs: GROK_PROXY_TIMEOUT_MS });
+      const diagnostic = saveGrokDiagnostic({
+        action: "grok",
+        durationMs: Date.now() - startedAt,
+        httpStatus: null,
+        model: proxyRequest.body.model,
+        outcome: failure.outcome,
+        requestBody,
+        responseBody,
+        responseShape: {
+          request: {
+            url: proxyRequest.url,
+            method: "POST",
+            headers: { ...proxyRequest.headers, authorization: "[REDACTED]" },
+            timeoutMs: GROK_PROXY_TIMEOUT_MS,
+          },
+          response: null,
+          errorChain: failure.errorChain,
+        },
+        errorMessage: `${failure.message} ${failure.technicalMessage}`,
+      });
       return NextResponse.json(
         {
           ok: false,
-          status: "request_failed",
-          message: error instanceof Error ? error.message : "codeproxy 中转请求失败。",
+          status: failure.status,
+          diagnosticId: diagnostic?.id,
+          message: failure.message,
+          technicalMessage: failure.technicalMessage,
+          suggestion: failure.suggestion,
+          retryable: failure.retryable,
         },
-        { status: 502 }
+        { status: failure.status === "upstream_timeout" ? 504 : 502 }
       );
     } finally {
       clearTimeout(timeout);
     }
 
+    const responseShape = {
+      request: {
+        url: proxyRequest.url,
+        method: "POST",
+        headers: { ...proxyRequest.headers, authorization: "[REDACTED]" },
+        timeoutMs: GROK_PROXY_TIMEOUT_MS,
+      },
+      response: responseMetadata(response),
+    };
+
     if (!response.ok) {
+      const providerMessage = apiErrorMessage(responseJson, responseBody.trim() || "codeproxy 中转接口返回错误。");
+      const failure = providerFailureDetails(response.status, providerMessage, body.locale);
+      const diagnostic = saveGrokDiagnostic({
+        action: "grok",
+        durationMs: Date.now() - startedAt,
+        httpStatus: response.status,
+        model: proxyRequest.body.model,
+        outcome: "provider_error",
+        requestBody,
+        responseBody,
+        responseShape,
+        errorMessage: providerMessage,
+      });
       return NextResponse.json(
         {
           ok: false,
           status: "proxy_error",
-          message: apiErrorMessage(responseJson, "codeproxy 中转接口返回错误。"),
+          diagnosticId: diagnostic?.id,
+          message: failure.message,
+          technicalMessage: providerMessage,
+          suggestion: failure.suggestion,
+          retryable: response.status === 429 || response.status >= 500,
         },
         { status: response.status }
       );
@@ -284,7 +425,23 @@ export async function POST(request: Request) {
 
     const text = extractCodeProxyMessageText(responseJson);
     if (!text) {
-      return NextResponse.json({ ok: false, status: "empty_output", message: "codeproxy 没有返回可导入的文本结果。" }, { status: 502 });
+      const message = body.locale === "en" ? "codeproxy returned a successful HTTP response but no readable Grok text." : "codeproxy 返回了成功的 HTTP 状态，但响应中没有可读取的 Grok 文本。";
+      const suggestion = body.locale === "en" ? "Review the raw response in the diagnostic log and verify model compatibility." : "请根据日志编号查看原始响应，并检查当前模型是否兼容此接口。";
+      const diagnostic = saveGrokDiagnostic({
+        action: "grok",
+        durationMs: Date.now() - startedAt,
+        httpStatus: response.status,
+        model: proxyRequest.body.model,
+        outcome: "empty_output",
+        requestBody,
+        responseBody,
+        responseShape,
+        errorMessage: "extractCodeProxyMessageText returned an empty string.",
+      });
+      return NextResponse.json(
+        { ok: false, status: "empty_output", diagnosticId: diagnostic?.id, message, technicalMessage: "extractCodeProxyMessageText returned an empty string.", suggestion, retryable: true },
+        { status: 502 }
+      );
     }
 
     const structuredResult = parseStructuredSignalsFromText(text, { source: "grok" }) as {
@@ -294,18 +451,58 @@ export async function POST(request: Request) {
       error?: string;
     };
     const signals = Array.isArray(structuredResult.signals) ? structuredResult.signals : [];
-    const formattedText = signals.length > 0 ? formatSignalsAsLeadInput(signals) : text;
+    if (signals.length === 0) {
+      const parseError = structuredResult.error || "No importable signals were found.";
+      const message = body.locale === "en" ? "Grok returned content, but no importable signals could be parsed." : "Grok 已返回内容，但没有解析出任何可导入的互动线索。";
+      const suggestion = body.locale === "en" ? "Review the raw response in the log. Retry if the model did not follow the required JSON format." : "请根据日志编号查看模型原始响应；如果模型没有按要求返回 JSON，可重新查询。";
+      const diagnostic = saveGrokDiagnostic({
+        action: "grok",
+        durationMs: Date.now() - startedAt,
+        httpStatus: response.status,
+        model: proxyRequest.body.model,
+        outcome: "no_importable_signals",
+        requestBody,
+        responseBody,
+        responseShape: { ...responseShape, parser: { error: parseError, textLength: text.length } },
+        errorMessage: parseError,
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          status: "no_importable_signals",
+          diagnosticId: diagnostic?.id,
+          message,
+          technicalMessage: parseError,
+          suggestion,
+          retryable: true,
+        },
+        { status: 422 }
+      );
+    }
+
+    const formattedText = formatSignalsAsLeadInput(signals);
+    const diagnostic = saveGrokDiagnostic({
+      action: "grok",
+      durationMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      model: proxyRequest.body.model,
+      outcome: "success",
+      requestBody,
+      responseBody,
+      responseShape: { ...responseShape, parser: { signalCount: signals.length, textLength: text.length } },
+    });
 
     return NextResponse.json({
       ok: true,
       status: "success",
+      diagnosticId: diagnostic?.id,
       model: proxyRequest.body.model,
       text: formattedText,
       rawText: text,
-      structured: signals.length > 0,
+      structured: true,
       signals,
       accountRadar: structuredResult.accountRadar ?? null,
-      parseError: signals.length > 0 ? "" : structuredResult.error || "",
+      parseError: "",
       pulledProfile: pulledProfile
         ? {
             username: pulledProfile.username,

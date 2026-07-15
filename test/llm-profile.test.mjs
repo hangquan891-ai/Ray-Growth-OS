@@ -37,10 +37,19 @@ test("buildOpenAiProfileRequestBody creates a strict Responses API schema", () =
   const schema = createProfileResponseSchema();
 
   assert.equal(body.model, "gpt-5.5");
+  assert.equal(body.max_output_tokens, 2400);
+  assert.equal(body.reasoning.effort, "none");
   assert.equal(body.text.format.type, "json_schema");
   assert.equal(body.text.format.strict, true);
   assert.deepEqual(body.text.format.schema, schema);
   assert.match(body.input[0].content, /form-ready positioning/);
+
+  const compatibleBody = buildOpenAiProfileRequestBody({
+    model: "custom-compatible-model",
+    payload: { mode: "growth", xProfileUrl: "https://x.com/example", current: {} },
+  });
+  assert.equal(compatibleBody.reasoning, undefined);
+  assert.equal(compatibleBody.max_output_tokens, 2400);
 });
 
 test("normalizeGeneratedProfile preserves practical defaults and trims long text", () => {

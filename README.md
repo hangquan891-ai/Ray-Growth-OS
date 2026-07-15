@@ -6,6 +6,8 @@ An open-source, local-first AI growth workbench for turning public X discussions
 
 中文界面默认可用；切换器提供 English UI and makes AI-generated positioning, scoring rationale, drafts, and learning output follow the selected language.
 
+> First time here? See the step-by-step [user guide](docs/USER_GUIDE.md). A [Chinese guide](docs/USER_GUIDE.zh-CN.md) is also available.
+
 > Status: local MVP. It is designed for individual builders and small teams validating a workflow, not as a hosted CRM or an autonomous outreach bot.
 
 ## What it does
@@ -45,7 +47,7 @@ Discovery quality depends on the positioning, the configured model, and public-s
 
 ## Quick start
 
-Prerequisites: a current Node.js LTS release and npm.
+Prerequisites: Node.js 22.5 or newer and npm. The app uses Node's built-in SQLite support, so no separate database service is required.
 
 ```bash
 npm install
@@ -54,7 +56,7 @@ npm run dev
 
 Open [http://localhost:3001](http://localhost:3001).
 
-The default example is intentionally generic. Replace it with your own product or account positioning before searching.
+The workbench starts empty. Add your own product or account positioning before searching.
 
 ### Optional AI configuration
 
@@ -64,14 +66,19 @@ Open **Settings** in the app to configure:
 - an AI Responses-compatible key and model for positioning suggestions, semantic scoring, drafts, and learning;
 - an optional public X profile URL used to create an editable positioning draft.
 
-For this local MVP, these settings are stored in the current browser's `localStorage`; they are not included in a workbench JSON backup. Do not use this storage model unchanged for a multi-user deployment. Move keys to a server-side secret manager before hosting the app for others.
+Settings and new workbench data are stored in a local SQLite database, so browsers on the same computer and port share one copy. On the first upgrade, the app migrates only the existing Grok, AI, and X profile settings from the current browser. It deliberately does not migrate legacy positioning, queues, scores, drafts, feedback, or growth memory, giving existing users a clean workbench for retesting.
 
-`.env.local.example` documents optional server-side fallback variables for the AI routes. Browser settings remain the simplest local-development path.
+The database is stored at `%LOCALAPPDATA%\RayGrowthOS\ray-growth-os.db` on Windows, `~/Library/Application Support/RayGrowthOS/ray-growth-os.db` on macOS, and `$XDG_DATA_HOME/ray-growth-os/ray-growth-os.db` (or `~/.local/share/ray-growth-os/`) on Linux. Set `RAY_GROWTH_OS_DATA_DIR` to override the directory.
+
+This remains a local single-user security model: API keys are stored locally and are excluded from workbench JSON backups, but they are not protected by a hosted secret manager. Move keys to server-side secret management before deploying the app for multiple users.
+
+`.env.local.example` documents optional server-side fallback variables for the AI routes. The in-app Settings page remains the simplest local-development path.
 
 ## Commands
 
 ```bash
 npm run dev        # start Next.js on port 3001
+npm start          # run a completed production build on port 3001
 npm run typecheck  # TypeScript checks
 npm test           # unit tests
 npm run build      # production build
@@ -110,7 +117,10 @@ It does **not** publish replies, read DMs, bypass login, or call the paid X API.
 1. Open the extension popup and save your X handle (the part after `@`), or configure your public X profile in the app.
 2. Click **Read queue from App** in the popup.
 3. Open a source post from the workbench and reply on X yourself.
-4. Once the reply is visible, use **Scan current X page** or **Inspect saved reply links**.
+4. Once the reply is visible in the source conversation, the extension writes it back automatically. If capture is missed, use **Recover reply on current page and write back**.
+5. Use **Inspect recorded reply links** only after the reply URL has been saved, to check later public feedback.
+
+The inspection action cannot recover a reply URL that was never captured. After extension code changes, reload the unpacked extension at `chrome://extensions/` and refresh existing App/X tabs.
 5. Keep the workbench tab open and use **Write pending feedback to App** if an update was stored while the app was unavailable.
 
 The extension relies on public X page DOM and may need maintenance after X UI changes. For its Chinese, implementation-focused notes, see [the extension README](extension/ray-growth-os-x-helper/README.md).

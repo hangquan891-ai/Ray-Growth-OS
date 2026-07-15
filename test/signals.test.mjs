@@ -195,6 +195,36 @@ test("mergeSignals preserves execution status metadata", () => {
   assert.equal(result.signals[0].usedDraft, "actual reply that got a response");
   assert.equal(result.signals[0].usedDraftAt, "2026-07-07T09:10:00.000Z");
 });
+test("mergeSignals keeps a missing legacy import time unknown", () => {
+  const result = mergeSignals(
+    [
+      {
+        platform: "X",
+        author: "legacy maker",
+        url: "https://x.com/legacy/status/1",
+        text: "historical row without import metadata",
+        source: "manual",
+        importedAt: "",
+        status: "new",
+        tags: [],
+      },
+    ],
+    [
+      {
+        platform: "X",
+        author: "new maker",
+        url: "https://x.com/new/status/2",
+        text: "newly imported row",
+        source: "grok",
+        status: "new",
+        tags: [],
+      },
+    ]
+  );
+
+  assert.equal(result.signals[0].importedAt, "");
+  assert.ok(result.signals[1].importedAt);
+});
 test("buildFeedbackLearningPack exports AI review samples with feedback and actual replies", () => {
   const pack = buildFeedbackLearningPack(
     [

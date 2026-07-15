@@ -40,12 +40,12 @@
 
       <section class="actions">
         <button id="syncApp" type="button">从 App 读取队列</button>
-        <button id="scanX" type="button">手动补扫当前 X 页面</button>
-        <button id="refreshReplies" type="button">巡检已保存回复链接</button>
+        <button id="scanX" type="button">找回当前页回复并回写</button>
+        <button id="refreshReplies" type="button">巡检已记录的回复链接</button>
         <button id="applyApp" type="button">手动回写暂存反馈</button>
       </section>
 
-      <p id="status" class="status">先读取 App 队列；从 App 打开原帖并在 X 回复后，插件会保存回复链接，再用于巡检反馈。</p>
+      <p id="status" class="status">先读取 App 队列；必须从 App 的“复制回复并打开原帖”进入 X。发布后若未自动回写，请停留在原帖对话页并点“找回当前页回复并回写”。</p>
     </main>
     <script src="popup.js"></script>
   </body>
