@@ -184,13 +184,30 @@
 
   function normalizeGrowthMemoryForPrompt(memory) {
     if (!memory || typeof memory !== "object" || !memory.active) return null;
+    const activeKeywords = (keywords, rules) => {
+      const inactivePatterns = Array.isArray(rules)
+        ? rules.filter((rule) => rule?.status && rule.status !== "active").map((rule) => clean(rule?.pattern).toLowerCase()).filter(Boolean)
+        : [];
+      return Array.isArray(keywords)
+        ? keywords.map(clean).filter(Boolean).filter((keyword) => {
+            const value = keyword.toLowerCase();
+            return !inactivePatterns.some((pattern) => Math.min(pattern.length, value.length) >= 4 && (pattern.includes(value) || value.includes(pattern)));
+          })
+        : [];
+    };
+    const compactRules = (rules) => Array.isArray(rules)
+      ? rules
+          .filter((rule) => !rule?.status || rule.status === "active")
+          .slice(0, 5)
+          .map((rule) => ({ pattern: clean(rule?.pattern).slice(0, 120), reason: clean(rule?.reason).slice(0, 240), weight: Math.max(1, Math.min(12, Math.round(Number(rule?.weight) || 4))) }))
+      : [];
     return {
-      summary: clean(memory.summary),
-      effectiveKeywords: Array.isArray(memory.effectiveKeywords) ? memory.effectiveKeywords.map(clean).filter(Boolean).slice(0, 8) : [],
-      weakKeywords: Array.isArray(memory.weakKeywords) ? memory.weakKeywords.map(clean).filter(Boolean).slice(0, 8) : [],
-      scoreBoostRules: Array.isArray(memory.scoreBoostRules) ? memory.scoreBoostRules.slice(0, 6) : [],
-      scorePenaltyRules: Array.isArray(memory.scorePenaltyRules) ? memory.scorePenaltyRules.slice(0, 6) : [],
-      nextExperiment: clean(memory.nextExperiment),
+      summary: clean(memory.summary).slice(0, 500),
+      effectiveKeywords: activeKeywords(memory.effectiveKeywords, memory.scoreBoostRules).slice(0, 6),
+      weakKeywords: activeKeywords(memory.weakKeywords, memory.scorePenaltyRules).slice(0, 6),
+      scoreBoostRules: compactRules(memory.scoreBoostRules),
+      scorePenaltyRules: compactRules(memory.scorePenaltyRules),
+      nextExperiment: clean(memory.nextExperiment).slice(0, 300),
     };
   }
 

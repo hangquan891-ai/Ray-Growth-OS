@@ -45,11 +45,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { AI_RESPONSE_CONFIG_STORAGE_KEY, DEFAULT_AI_RESPONSE_MODEL, DEFAULT_GROK_PROXY_MODEL, GROK_PROXY_CONFIG_STORAGE_KEY, X_PROFILE_CONFIG_STORAGE_KEY, normalizeAiResponseConfig, normalizeGrokProxyConfig, normalizeXProfileConfig } from "@/lib/codeproxy-grok";
 import { buildGrokSearchPrompt } from "@/lib/grok-utils";
 import { AI_DRAFT_LIMIT, applyAiDraftOverrides, buildDraftRequestInput } from "@/lib/llm-drafts";
-import { applyGrowthMemoryToQueueItems, buildGrowthMemoryPromptContext, buildGrowthMemoryRequestInput, growthMemoryKeywordText, normalizeGrowthMemoryState } from "@/lib/growth-memory";
+import { applyGrowthMemoryToQueueItems, buildGrowthMemoryPromptContext, buildGrowthMemoryRequestInput, growthMemoryKeywordText, mergeGrowthMemoryState, normalizeGrowthMemoryState } from "@/lib/growth-memory";
 import { AI_SCORE_LIMIT, applyAiScoreOverrides, buildScoreRequestInput } from "@/lib/llm-scoring";
 import { LocalStateConflictError, loadSharedSettings, readLocalState, writeLocalState } from "@/lib/local-state-client";
 import { runGrowthWorkflow } from "@/lib/outbound";
 import { PROFILE_MAX_RETRIES, isRetryableProfileFailure, profileRetryDelayMs } from "@/lib/profile-retry";
+import { matchesQueueTimeRange, preferredVisibleQueueTimeRange } from "@/lib/queue-time-range";
 import { buildFeedbackLearningPack, createSignal, formatSignalsAsLeadInput, mergeSignals, parseSignalsFromText, signalDedupKey } from "@/lib/signals";
 import { CURRENT_VERSION, DEFAULT_AI_DRAFT_STATE, DEFAULT_AI_SCORE_STATE, DEFAULT_GROK_BRIDGE_STATE, DEFAULT_GROWTH_MEMORY_STATE, DEFAULT_ONBOARDING_STATE, DEFAULT_SIGNAL_STATE, DEFAULT_WORKBENCH_STATE, createOperationalWorkbenchSnapshot, createWorkbenchBackup, mergeConcurrentWorkbenchState, parseStoredWorkbenchState, parseWorkbenchBackup, serializeWorkbenchState } from "@/lib/workbench-state";
 import { cn } from "@/lib/utils";
@@ -274,6 +275,7 @@ type Signal = {
   importedAt: string;
   status: string;
   tags: string[];
+  sourceLanguage?: string;
   reason?: string;
   confidence?: number;
   processedAt?: string;
@@ -397,6 +399,19 @@ type GrowthMemoryRule = {
   pattern: string;
   reason: string;
   weight: number;
+  status: "active" | "watch" | "paused";
+  confidence: number;
+  positiveEvidence: number;
+  negativeEvidence: number;
+  lastValidatedAt: string;
+};
+
+type GrowthMemoryMergeStats = {
+  added: number;
+  merged: number;
+  strengthened: number;
+  weakened: number;
+  paused: number;
 };
 
 type GrowthMemoryState = {
@@ -406,6 +421,10 @@ type GrowthMemoryState = {
   sampleCount: number;
   positiveCount: number;
   noReplyCount: number;
+  learningRunCount: number;
+  lastBatchSampleCount: number;
+  learnedSampleKeys: string[];
+  lastMergeStats: GrowthMemoryMergeStats;
   summary: string;
   effectiveKeywords: string[];
   weakKeywords: string[];
@@ -427,7 +446,9 @@ type GrowthMemoryApiResponse = {
 
 type GrowthMemoryRunResult = {
   count: number;
+  totalCount: number;
   model: string;
+  stats: GrowthMemoryMergeStats;
 };
 
 type XFeedbackPullUpdate = {
@@ -456,10 +477,12 @@ type XFeedbackPullRunResult = {
 type SignalImportPreviewData = {
   parsedCount: number;
   importableCount: number;
+  updatedCount: number;
   duplicateCount: number;
   excludedOwnCount: number;
   candidates: Signal[];
   importable: Signal[];
+  updated: Signal[];
   duplicates: Signal[];
   excludedOwn: Signal[];
 };
@@ -479,6 +502,7 @@ type OutboundLead = {
   label: string;
   reasons: string[];
   draft: string;
+  sourceLanguage?: string;
 };
 
 type GrowthOpportunity = {
@@ -494,6 +518,7 @@ type GrowthOpportunity = {
   quoteDraft: string;
   postIdea: string;
   outreachDraft: string;
+  sourceLanguage?: string;
 };
 
 type QueueItem = OutboundLead | GrowthOpportunity;
@@ -649,14 +674,16 @@ function stripDemoSourceUrls(value: string) {
 }
 
 function createSignalPreviewFromCandidates(candidates: Signal[], existingSignals: Signal[], excludedOwn: Signal[] = []): SignalImportPreviewData {
-  const result = mergeSignals(existingSignals, candidates) as { signals: Signal[]; imported: Signal[]; duplicates: Signal[] };
+  const result = mergeSignals(existingSignals, candidates) as { signals: Signal[]; imported: Signal[]; updated: Signal[]; duplicates: Signal[] };
   return {
     parsedCount: candidates.length + excludedOwn.length,
     importableCount: result.imported.length,
+    updatedCount: result.updated.length,
     duplicateCount: result.duplicates.length,
     excludedOwnCount: excludedOwn.length,
     candidates,
     importable: result.imported,
+    updated: result.updated,
     duplicates: result.duplicates,
     excludedOwn,
   };
@@ -687,33 +714,6 @@ function isToday(value?: string) {
   if (Number.isNaN(date.getTime())) return false;
   const today = new Date();
   return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
-}
-
-function matchesQueueTimeRange(value: string | undefined, range: QueueTimeRangeKey, now = new Date()) {
-  if (range === "all") return true;
-  if (!value) return false;
-
-  const timestamp = new Date(value).getTime();
-  if (Number.isNaN(timestamp)) return false;
-
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const start = new Date(todayStart);
-  const end = new Date(todayStart);
-
-  if (range === "today") {
-    end.setDate(end.getDate() + 1);
-  } else if (range === "yesterday") {
-    start.setDate(start.getDate() - 1);
-  } else if (range === "7d") {
-    start.setDate(start.getDate() - 6);
-    end.setDate(end.getDate() + 1);
-  } else {
-    start.setDate(start.getDate() - 29);
-    end.setDate(end.getDate() + 1);
-  }
-
-  return timestamp >= start.getTime() && timestamp < end.getTime();
 }
 
 function emptyExecutionCounts(): Record<SignalExecutionStatus, number> {
@@ -1423,6 +1423,13 @@ export default function Home() {
     () => mergeLeadInputWithSignals(current.leadInput, signals[mode] ?? []),
     [current.leadInput, mode, signals]
   );
+  const signalByKey = useMemo(() => {
+    const map = new Map<string, Signal>();
+    for (const signal of signals[mode] ?? []) {
+      map.set(signalDedupKey(signal), signal);
+    }
+    return map;
+  }, [mode, signals]);
 
   const localResult = useMemo((): GrowthResult => {
     const workflow = runGrowthWorkflow(
@@ -1435,8 +1442,15 @@ export default function Home() {
       },
       workflowLeadInput
     ) as { queries: Query[]; opportunities: GrowthOpportunity[] };
-    return { mode: "growth", ...workflow };
-  }, [current, mode, workflowLeadInput]);
+    return {
+      mode: "growth",
+      ...workflow,
+      opportunities: workflow.opportunities.map((item) => {
+        const sourceLanguage = signalByKey.get(queueItemSignalKey(item))?.sourceLanguage;
+        return sourceLanguage ? { ...item, sourceLanguage } : item;
+      }),
+    };
+  }, [current, mode, signalByKey, workflowLeadInput]);
 
   const scoredResult = useMemo(() => applyAiScoreOverrides(localResult, aiScores[mode]) as WorkbenchResult, [aiScores, localResult, mode]);
   const memoryAdjustedResult = useMemo(() => applyGrowthMemoryToQueueItems(scoredResult, growthMemory) as WorkbenchResult, [growthMemory, scoredResult]);
@@ -1448,13 +1462,6 @@ export default function Home() {
   const draftCount = result.mode === "outbound" ? result.leads.length : result.opportunities.length * 4;
   const averageScore = items.length ? Math.round(items.reduce((sum, item) => sum + item.score, 0) / items.length) : 0;
   const topItem = items[0];
-  const signalByKey = useMemo(() => {
-    const map = new Map<string, Signal>();
-    for (const signal of signals[mode] ?? []) {
-      map.set(signalDedupKey(signal), signal);
-    }
-    return map;
-  }, [mode, signals]);
   const ownAccountIdentity = useMemo(() => buildOwnAccountIdentity(current, loadXProfileConfig().profileUrl), [current]);
   const dailyItems = useMemo(
     () => items.filter((item) => normalizeExecutionStatus(signalByKey.get(queueItemSignalKey(item))?.status) === "new").slice(0, 5),
@@ -2103,10 +2110,14 @@ export default function Home() {
       signals: signals[mode] ?? [],
       aiScores: aiScores[mode] ?? {},
       aiDrafts: aiDrafts[mode] ?? {},
+      previousMemory: growthMemory,
     });
 
     if (payload.samples.length === 0) {
-      throw new Error("还没有可学习的反馈样本。先在互动队列里标记有回复、无回复、被关注或被转发。");
+      const hasFeedback = (signals[mode] ?? []).some((signal) => normalizeFeedbackStatus(signal.feedback) !== "none");
+      throw new Error(hasFeedback
+        ? "当前反馈已经学习过了。请先处理新的互动并标记反馈，再增长到下一轮。"
+        : "还没有可学习的反馈样本。先在互动队列里标记有回复、无回复、被关注或被转发。");
     }
 
     const aiConfig = loadAiResponseConfig();
@@ -2125,9 +2136,14 @@ export default function Home() {
       throw new Error(data.message || "增长记忆生成失败，请稍后再试。");
     }
 
-    const nextMemory = normalizeGrowthMemoryState(data.memory) as GrowthMemoryState;
+    const nextMemory = mergeGrowthMemoryState(growthMemory, data.memory, payload) as GrowthMemoryState;
     setGrowthMemory(nextMemory);
-    return { count: nextMemory.sampleCount, model: data.model || "AI" };
+    return {
+      count: payload.samples.length,
+      totalCount: nextMemory.sampleCount,
+      model: data.model || "AI",
+      stats: nextMemory.lastMergeStats,
+    };
   }
 
   function applyGrowthMemory() {
@@ -2343,6 +2359,7 @@ export default function Home() {
                   applyGrowthMemory={applyGrowthMemory}
                   pauseGrowthMemory={pauseGrowthMemory}
                   clearGrowthMemory={clearGrowthMemory}
+                  onFindPeople={() => setActiveTab("search")}
                   growthMemory={growthMemory}
                   executionStats={executionStats}
                   recentProcessedSignals={recentProcessedSignals}
@@ -2974,6 +2991,7 @@ function EngageTab({
   applyGrowthMemory,
   pauseGrowthMemory,
   clearGrowthMemory,
+  onFindPeople,
   growthMemory,
   executionStats,
   recentProcessedSignals,
@@ -2999,6 +3017,7 @@ function EngageTab({
   applyGrowthMemory: () => void;
   pauseGrowthMemory: () => void;
   clearGrowthMemory: () => void;
+  onFindPeople: () => void;
   growthMemory: GrowthMemoryState;
   executionStats: ExecutionStats;
   recentProcessedSignals: Signal[];
@@ -3008,6 +3027,7 @@ function EngageTab({
   const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   const [engageView, setEngageView] = useState<"queue" | "feedback" | "memory" | "stats">("queue");
   const [timeRange, setTimeRange] = useState<QueueTimeRangeKey>("today");
+  const autoTimeRangeResolvedRef = useRef<Record<Mode, boolean>>({ outbound: false, growth: false });
   const [priorityFilters, setPriorityFilters] = useState<PriorityFilterKey[]>([]);
   const [processFilters, setProcessFilters] = useState<ProcessFilterKey[]>([]);
   const [feedbackFilters, setFeedbackFilters] = useState<SignalFeedbackStatus[]>([]);
@@ -3084,6 +3104,7 @@ function EngageTab({
   const contextUsesSelection = Boolean(contextMenu && selectedKeySet.has(contextMenu.key) && selectedItems.length > 0);
   const contextActionCount = contextUsesSelection ? selectedItems.length : contextItem ? 1 : selectedItems.length;
   const unknownTimeCount = items.filter((item) => !itemImportedAt(item)).length;
+  const preferredTimeRange = preferredVisibleQueueTimeRange(items.map((item) => itemImportedAt(item)));
   const timeRangeOptions: Array<{ key: QueueTimeRangeKey; label: string; count: number }> = [
     { key: "today", label: tr("今天", "Today"), count: items.filter((item) => matchesQueueTimeRange(itemImportedAt(item), "today")).length },
     { key: "yesterday", label: tr("昨天", "Yesterday"), count: items.filter((item) => matchesQueueTimeRange(itemImportedAt(item), "yesterday")).length },
@@ -3092,6 +3113,7 @@ function EngageTab({
     { key: "all", label: tr("全部", "All time"), count: items.length },
   ];
   const activeTimeRangeLabel = timeRangeOptions.find((option) => option.key === timeRange)?.label ?? tr("今天", "Today");
+  const preferredTimeRangeOption = timeRangeOptions.find((option) => option.key === preferredTimeRange) ?? timeRangeOptions[4];
   const processOptions: Array<FilterOption<ProcessFilterKey>> = [
     { key: "all", label: "全部", count: timeScopedItems.length },
     { key: "pending", label: "未处理", count: timeScopedItems.filter((item) => itemStatus(item) === "new").length },
@@ -3119,11 +3141,26 @@ function EngageTab({
   const processFilterSignature = processFilters.join("|");
   const feedbackFilterSignature = feedbackFilters.join("|");
   const engageViews: Array<{ key: typeof engageView; label: string; description: string; icon: ReactNode; stat: string }> = [
-    { key: "queue", label: "互动列表", description: "筛选、评分、生成草稿、批量处理。", icon: <MessageSquareText className="h-4 w-4" />, stat: `${filteredItems.length} 条` },
+    { key: "queue", label: "互动列表", description: "筛选、评分、生成草稿、批量处理。", icon: <MessageSquareText className="h-4 w-4" />, stat: `${items.length} 条` },
     { key: "feedback", label: "反馈复盘", description: "看有回复、无回复、关注和转发结果。", icon: <Activity className="h-4 w-4" />, stat: `${executionStats.feedbackToday} 今日` },
     { key: "memory", label: "增长记忆", description: "让反馈反过来调整评分和关键词。", icon: <Sparkles className="h-4 w-4" />, stat: growthMemory.active ? "已应用" : "未应用" },
     { key: "stats", label: "执行统计", description: "查看处理量、正反馈和最近动作。", icon: <Gauge className="h-4 w-4" />, stat: `${executionStats.processed}/${executionStats.total}` },
   ];
+
+  useEffect(() => {
+    if (items.length === 0 || autoTimeRangeResolvedRef.current[mode]) return;
+    autoTimeRangeResolvedRef.current[mode] = true;
+    if (timeRange !== "today" || preferredTimeRange === "today") return;
+
+    setTimeRange(preferredTimeRange);
+    setAiActionState("idle");
+    const message = tr(
+      `今天没有新条目，已自动显示“${preferredTimeRangeOption.label}”中的 ${preferredTimeRangeOption.count} 条历史数据。`,
+      `There are no new items today. Showing ${preferredTimeRangeOption.count} historical items from ${preferredTimeRangeOption.label} instead.`
+    );
+    setAiActionMessage(message);
+    showToast(message, "info");
+  }, [items.length, mode, preferredTimeRange, preferredTimeRangeOption.count, preferredTimeRangeOption.label, timeRange]);
 
   useEffect(() => {
     setQueuePage(1);
@@ -3477,7 +3514,22 @@ function EngageTab({
                   onDelete={() => onDeleteItems([item])}
                 />
               );
-            }) : (
+            }) : timeRange === "today" && timeScopedItems.length === 0 ? (
+              <div className="rounded-lg border border-amber-300/15 bg-amber-400/[0.05] p-8 text-center text-sm text-amber-50/75">
+                <p className="text-base font-bold text-amber-50">{tr("今天暂无数据", "No data today")}</p>
+                <p className="mt-2 text-sm leading-6 text-amber-50/60">
+                  {tr("可以查看近 7 天的数据，或者去定位找人拉取新的潜在互动对象。", "Review data from the last 7 days, or find people to pull new engagement opportunities.")}
+                </p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Button type="button" variant="outline" size="sm" className="tech-secondary h-8" onClick={() => setTimeRange("7d")}>
+                    {tr(`查看近 7 天（${timeRangeOptions.find((option) => option.key === "7d")?.count ?? 0}）`, `View last 7 days (${timeRangeOptions.find((option) => option.key === "7d")?.count ?? 0})`)}
+                  </Button>
+                  <Button type="button" size="sm" className="tech-cta h-8" onClick={onFindPeople}>
+                    <Search className="h-3.5 w-3.5" /> {tr("去定位找人", "Find people")}
+                  </Button>
+                </div>
+              </div>
+            ) : (
               <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] p-8 text-center text-sm text-white/45">当前时间范围或筛选条件下没有条目，可以切换时间范围，或放宽处理状态、反馈状态和优先级筛选。</div>
             )}
           </div>
@@ -4830,21 +4882,21 @@ function GrokBridgePanel({
     }
     if (candidates.length === 0) {
       setBridgeState("error");
-      setBridgeMessage("没有解析到可导入的结果。建议让 Grok 按「X | 作者 | 链接 | 摘要」格式返回，每条一行。");
+      setBridgeMessage("没有解析到可导入的结果。建议让 Grok 按「X | 作者 | 链接 | 原帖语言代码 | 保留原语言的精简原文」格式返回，每条一行。");
       showToast(tr("没有解析到可导入结果，未执行导入。", "No importable results were parsed, so nothing was imported."), "error");
       return;
     }
 
-    const merged = mergeSignals(existingSignals, candidates) as { signals: Signal[]; imported: Signal[]; duplicates: Signal[] };
+    const merged = mergeSignals(existingSignals, candidates) as { signals: Signal[]; imported: Signal[]; updated: Signal[]; duplicates: Signal[] };
     setModeSignals(merged.signals);
-    if (merged.imported.length > 0) {
+    if (merged.imported.length > 0 || merged.updated.length > 0) {
       updateField("leadInput", formatSignalsAsLeadInput(merged.signals));
     }
 
     setProxySearchResult(null);
     setBridgeState("idle");
     const excludedLabel = excludedOwnGrokCandidates.length ? "，排除自己账号 " + excludedOwnGrokCandidates.length + " 条" : "";
-    const importMessage = "已解析 " + originalCount + " 条结果，导入 " + merged.imported.length + " 条，跳过重复 " + merged.duplicates.length + " 条" + excludedLabel + "。互动队列会自动更新。";
+    const importMessage = "已解析 " + originalCount + " 条结果，新增 " + merged.imported.length + " 条，更新旧记录 " + merged.updated.length + " 条，跳过重复 " + merged.duplicates.length + " 条" + excludedLabel + "。互动队列会自动更新。";
     setBridgeMessage(importMessage);
     showToast(importMessage, merged.imported.length > 0 ? "success" : "info");
   }
@@ -5039,8 +5091,8 @@ function GrokBridgePanel({
                 <h3 className="mt-3 text-base font-bold text-white">{isAccountRadar ? "是否导入这批竞品洞察线索？" : "是否导入这批 Grok 结果？"}</h3>
                 <p className="mt-1 text-sm leading-6 text-white/55">
                   {tr(
-                    `模型：${proxySearchResult.model}。已解析 ${importPreview.parsedCount} 条，可导入 ${importPreview.importableCount} 条，重复 ${importPreview.duplicateCount} 条${importPreview.excludedOwnCount ? `，已排除自己账号 ${importPreview.excludedOwnCount} 条` : ""}。下方分页展示全部结果，当前 ${resultPreviewDisplayStart}-${resultPreviewEnd} 条。`,
-                    `Model: ${proxySearchResult.model}. Parsed ${importPreview.parsedCount}; ${importPreview.importableCount} importable; ${importPreview.duplicateCount} duplicates${importPreview.excludedOwnCount ? `; ${importPreview.excludedOwnCount} results from your own account excluded` : ""}. Results are paginated below; showing ${resultPreviewDisplayStart}-${resultPreviewEnd}.`
+                    `模型：${proxySearchResult.model}。已解析 ${importPreview.parsedCount} 条，可新增 ${importPreview.importableCount} 条，可更新旧记录 ${importPreview.updatedCount} 条，重复 ${importPreview.duplicateCount} 条${importPreview.excludedOwnCount ? `，已排除自己账号 ${importPreview.excludedOwnCount} 条` : ""}。下方分页展示全部结果，当前 ${resultPreviewDisplayStart}-${resultPreviewEnd} 条。`,
+                    `Model: ${proxySearchResult.model}. Parsed ${importPreview.parsedCount}; ${importPreview.importableCount} new; ${importPreview.updatedCount} existing records can be updated; ${importPreview.duplicateCount} duplicates${importPreview.excludedOwnCount ? `; ${importPreview.excludedOwnCount} results from your own account excluded` : ""}. Results are paginated below; showing ${resultPreviewDisplayStart}-${resultPreviewEnd}.`
                   )}
                 </p>
                 {!proxySearchResult.structured && proxySearchResult.parseError ? <p className="mt-1 text-xs text-amber-200/70">JSON 解析未命中，已自动回退到文本解析。</p> : null}
@@ -5049,7 +5101,7 @@ function GrokBridgePanel({
                 <Button type="button" variant="outline" className="tech-secondary" onClick={() => setProxySearchResult(null)}>
                   暂不导入
                 </Button>
-                <Button type="button" className="tech-cta" onClick={importGrokResult} disabled={importPreview.importableCount === 0}>
+                <Button type="button" className="tech-cta" onClick={importGrokResult} disabled={importPreview.importableCount === 0 && importPreview.updatedCount === 0}>
                   <Upload className="h-4 w-4" /> 导入结果
                 </Button>
               </div>
@@ -5165,7 +5217,7 @@ function GrokBridgePanel({
                 updateGrokBridgeField(activeResultField, event.target.value);
                 setProxySearchResult(null);
               }}
-              placeholder={isAccountRadar ? "竞品洞察生成的线索会出现在这里，也可以粘贴 X | 作者 | 链接 | 摘要 格式结果。" : "Grok 或 codeproxy 返回的结果会出现在这里。推荐格式：X | 作者 | 链接 | 摘要"}
+              placeholder={isAccountRadar ? "竞品洞察生成的线索会出现在这里，也可以粘贴 X | 作者 | 链接 | 原帖语言代码 | 保留原语言的精简原文 格式结果。" : "Grok 或 codeproxy 返回的结果会出现在这里。推荐格式：X | 作者 | 链接 | 原帖语言代码 | 保留原语言的精简原文"}
               className="min-h-[220px] resize-none border-white/[0.08] bg-[#0d0d10]/80 text-sm leading-6 text-white placeholder:text-white/35"
             />
             <SignalImportPreview preview={importPreview} />
@@ -5303,10 +5355,10 @@ function SignalImportPreview({ preview }: { preview: SignalImportPreviewData }) 
   const { locale } = useI18n();
   const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   const [previewPage, setPreviewPage] = useState(1);
-  const hasOnlyDuplicates = preview.importableCount === 0 && preview.duplicateCount > 0;
-  const hasOnlyOwnAccount = preview.importableCount === 0 && preview.excludedOwnCount > 0 && preview.duplicateCount === 0;
-  const allPreviewItems = preview.importableCount > 0
-    ? preview.importable
+  const hasOnlyDuplicates = preview.importableCount === 0 && preview.updatedCount === 0 && preview.duplicateCount > 0;
+  const hasOnlyOwnAccount = preview.importableCount === 0 && preview.updatedCount === 0 && preview.excludedOwnCount > 0 && preview.duplicateCount === 0;
+  const allPreviewItems = preview.importableCount > 0 || preview.updatedCount > 0
+    ? [...preview.importable, ...preview.updated]
     : hasOnlyDuplicates
       ? preview.duplicates
       : hasOnlyOwnAccount
@@ -5319,7 +5371,7 @@ function SignalImportPreview({ preview }: { preview: SignalImportPreviewData }) 
   const previewEnd = Math.min(previewStart + previewPageSize, allPreviewItems.length);
   const previewDisplayStart = allPreviewItems.length > 0 ? previewStart + 1 : 0;
   const previewItems = allPreviewItems.slice(previewStart, previewEnd);
-  const previewScopeKey = `${hasOnlyDuplicates ? "duplicates" : hasOnlyOwnAccount ? "own" : "importable"}:${allPreviewItems.map((signal) => signal.id).join("|")}`;
+  const previewScopeKey = `${hasOnlyDuplicates ? "duplicates" : hasOnlyOwnAccount ? "own" : preview.updatedCount > 0 ? "updated" : "importable"}:${allPreviewItems.map((signal) => signal.id).join("|")}`;
 
   useEffect(() => {
     setPreviewPage(1);
@@ -5332,6 +5384,7 @@ function SignalImportPreview({ preview }: { preview: SignalImportPreviewData }) 
         <div className="flex flex-wrap gap-1.5">
           <span className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-white/70">解析 {preview.parsedCount}</span>
           <span className="rounded-md border border-emerald-500/10 bg-emerald-500/10 px-2 py-1 text-emerald-300">可导入 {preview.importableCount}</span>
+          {preview.updatedCount > 0 ? <span className="rounded-md border border-blue-500/10 bg-blue-500/10 px-2 py-1 text-blue-200">可更新旧记录 {preview.updatedCount}</span> : null}
           <span className="rounded-md border border-amber-500/10 bg-amber-500/10 px-2 py-1 text-amber-300">已在队列 {preview.duplicateCount}</span>
           {preview.excludedOwnCount > 0 ? <span className="rounded-md border border-rose-500/10 bg-rose-500/10 px-2 py-1 text-rose-200">排除自己账号 {preview.excludedOwnCount}</span> : null}
         </div>
@@ -5597,6 +5650,8 @@ function GrowthMemoryPanel({
   const positiveCount = feedbackSignals.filter((signal) => ["got_reply", "followed", "reshared"].includes(normalizeFeedbackStatus(signal.feedback))).length;
   const noReplyCount = feedbackSignals.filter((signal) => normalizeFeedbackStatus(signal.feedback) === "no_reply").length;
   const hasMemory = Boolean(memory.summary || memory.generatedAt || memory.effectiveKeywords.length || memory.scoreBoostRules.length || memory.replyStyleRules.length);
+  const activeRuleCount = [...memory.scoreBoostRules, ...memory.scorePenaltyRules].filter((rule) => rule.status === "active").length;
+  const mergeStats = memory.lastMergeStats ?? { added: 0, merged: 0, strengthened: 0, weakened: 0, paused: 0 };
   const generatedLabel = memory.generatedAt ? formatProcessedAt(memory.generatedAt) : "尚未生成";
   const appliedLabel = memory.appliedAt ? formatProcessedAt(memory.appliedAt) : "未应用";
 
@@ -5606,7 +5661,7 @@ function GrowthMemoryPanel({
     try {
       const result = await onRunLearning();
       setState("idle");
-      const successMessage = `已用 ${result.model} 从 ${result.count} 条反馈里生成增长记忆。确认后点“应用到下一轮”。`;
+      const successMessage = `已用 ${result.model} 学习 ${result.count} 条新反馈，累计 ${result.totalCount} 条；新增 ${result.stats.added}、合并 ${result.stats.merged}、增强 ${result.stats.strengthened}、降级 ${result.stats.weakened}、暂停 ${result.stats.paused} 条规则。确认后点“应用到下一轮”。`;
       setMessage(successMessage);
       showToast(successMessage, "success");
     } catch (error) {
@@ -5658,7 +5713,7 @@ function GrowthMemoryPanel({
           <div className="flex flex-wrap gap-2">
             <Button className="tech-cta h-9" onClick={() => void handleRunLearning()} disabled={state === "loading" || feedbackSignals.length === 0}>
               {state === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-              {hasMemory ? "重新学习" : "生成增长记忆"}
+              {hasMemory ? "增长到下一轮" : "生成增长记忆"}
             </Button>
             {memory.active ? (
               <Button variant="outline" className="tech-secondary h-9" onClick={handlePause} disabled={!hasMemory || state === "loading"}>
@@ -5677,9 +5732,9 @@ function GrowthMemoryPanel({
 
         <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded-lg border border-white/[0.06] bg-[#0d0d10]/55 p-3">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">可学习反馈</p>
-            <p className="mt-2 text-2xl font-black text-white">{feedbackSignals.length}</p>
-            <p className="mt-1 text-xs text-white/35">当前页面实际样本</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">累计学习样本</p>
+            <p className="mt-2 text-2xl font-black text-white">{memory.sampleCount}</p>
+            <p className="mt-1 text-xs text-white/35">本轮新增 {memory.lastBatchSampleCount} / 当前反馈 {feedbackSignals.length}</p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-[#0d0d10]/55 p-3">
             <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">正反馈</p>
@@ -5692,11 +5747,18 @@ function GrowthMemoryPanel({
             <p className="mt-1 text-xs text-white/35">用于识别降权模式</p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-[#0d0d10]/55 p-3">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">生成 / 应用</p>
-            <p className="mt-2 text-sm font-bold text-white">{generatedLabel}</p>
-            <p className="mt-1 text-xs text-white/35">{appliedLabel}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">活跃规则</p>
+            <p className="mt-2 text-2xl font-black text-blue-100">{activeRuleCount}/10</p>
+            <p className="mt-1 text-xs text-white/35">累计学习 {memory.learningRunCount} 轮</p>
           </div>
         </div>
+
+        {hasMemory ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-[#0d0d10]/45 px-3 py-2 text-xs text-white/45">
+            <span>本轮：新增 {mergeStats.added} · 合并 {mergeStats.merged} · 增强 {mergeStats.strengthened} · 降级 {mergeStats.weakened} · 暂停 {mergeStats.paused}</span>
+            <span>生成 {generatedLabel} · 应用 {appliedLabel}</span>
+          </div>
+        ) : null}
 
         {hasMemory ? (
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
@@ -5731,13 +5793,17 @@ function GrowthMemoryPanel({
               <div className="rounded-lg border border-white/[0.08] bg-[#0d0d10]/50 p-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-white/40">评分规则变化</p>
                 <div className="mt-3 grid gap-2">
-                  {[...memory.scoreBoostRules.map((rule) => ({ ...rule, type: "boost" })), ...memory.scorePenaltyRules.map((rule) => ({ ...rule, type: "penalty" }))].slice(0, 6).map((rule, index) => (
+                  {[...memory.scoreBoostRules.map((rule) => ({ ...rule, type: "boost" })), ...memory.scorePenaltyRules.map((rule) => ({ ...rule, type: "penalty" }))].slice(0, 10).map((rule, index) => (
                     <div key={`${rule.type}-${rule.pattern}-${index}`} className="rounded-md border border-white/[0.06] bg-white/[0.035] p-2">
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-sm font-bold text-white/80">{rule.pattern}</span>
-                        <Badge variant="outline" className={cn("rounded-md", rule.type === "boost" ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-amber-500/10 bg-amber-500/10 text-amber-200")}>{rule.type === "boost" ? "+" : "-"}{rule.weight}</Badge>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="outline" className={cn("rounded-md", rule.status === "active" ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : rule.status === "watch" ? "border-blue-500/10 bg-blue-500/10 text-blue-200" : "border-white/[0.08] bg-white/[0.04] text-white/45")}>{rule.status === "active" ? "启用" : rule.status === "watch" ? "观察" : "暂停"}</Badge>
+                          <Badge variant="outline" className={cn("rounded-md", rule.type === "boost" ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-amber-500/10 bg-amber-500/10 text-amber-200")}>{rule.type === "boost" ? "+" : "-"}{rule.weight}</Badge>
+                        </div>
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/45">{rule.reason}</p>
+                      <p className="mt-1 text-[11px] text-white/30">置信度 {rule.confidence}% · 正反馈证据 {rule.positiveEvidence} · 无回复证据 {rule.negativeEvidence}</p>
                     </div>
                   ))}
                   {memory.scoreBoostRules.length + memory.scorePenaltyRules.length === 0 ? <p className="text-sm text-white/40">暂无明确加权规则。</p> : null}

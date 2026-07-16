@@ -125,6 +125,8 @@ It summarizes:
 
 Read the result first, then choose whether to **Apply growth learning**. It is a reversible prioritization hint: you can pause or clear it without changing the original data.
 
+When new outcomes arrive, choose **Grow into the next round**. The app learns only feedback it has not processed before and revalidates related existing rules. Similar rules are merged; supported rules are strengthened; conflicting rules are downgraded or paused. The free edition activates at most 10 rules and never sends the complete learning history in every prompt, keeping context usage bounded over time.
+
 ## Optional capabilities
 
 ### AI scoring and drafts
@@ -135,6 +137,8 @@ After saving an AI Responses-compatible key and model in **Settings**, you can u
 - AI semantic scoring;
 - AI draft generation; and
 - AI growth learning.
+
+AI drafts follow each source post's language item by item. New discovery results store a concise source-language excerpt and a short language marker such as `en`; the interface language is used only when neither provides a reliable language. Reimporting the same URL can enrich an older record without overwriting its saved execution status or feedback.
 
 Without an AI key, the workbench still has local ranking rules and starter drafts. You can validate the workflow first.
 

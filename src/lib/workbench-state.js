@@ -55,6 +55,16 @@
     sampleCount: 0,
     positiveCount: 0,
     noReplyCount: 0,
+    learningRunCount: 0,
+    lastBatchSampleCount: 0,
+    learnedSampleKeys: [],
+    lastMergeStats: {
+      added: 0,
+      merged: 0,
+      strengthened: 0,
+      weakened: 0,
+      paused: 0,
+    },
     summary: "",
     effectiveKeywords: [],
     weakKeywords: [],
@@ -143,6 +153,7 @@
       tags: Array.isArray(source.tags) ? source.tags.map((tag) => stringOrFallback(tag, "")).filter(Boolean) : [],
     };
     const reason = stringOrFallback(source.reason, "").trim();
+    const sourceLanguage = stringOrFallback(source.sourceLanguage, "").trim();
     const confidence = Number(source.confidence);
     const processedAt = stringOrFallback(source.processedAt, "").trim();
     const processedAction = stringOrFallback(source.processedAction, "").trim();
@@ -154,6 +165,7 @@
     const usedDraftAt = stringOrFallback(source.usedDraftAt, "").trim();
 
     if (reason) signal.reason = reason;
+    if (sourceLanguage) signal.sourceLanguage = sourceLanguage;
     if (Number.isFinite(confidence)) signal.confidence = Math.max(0, Math.min(100, Math.round(confidence)));
     if (processedAt) signal.processedAt = processedAt;
     if (processedAction) signal.processedAction = processedAction;
@@ -283,17 +295,54 @@
     const reason = stringOrFallback(source.reason, "").trim();
     if (!pattern || !reason) return null;
     const weight = Math.max(1, Math.min(12, Math.round(Math.abs(Number(source.weight) || 4))));
-    return { pattern, reason, weight };
+    const status = ["active", "watch", "paused"].includes(source.status) ? source.status : "active";
+    const confidenceValue = Number(source.confidence);
+    const confidence = Number.isFinite(confidenceValue) ? Math.max(0, Math.min(100, Math.round(confidenceValue))) : 60;
+    const positiveEvidence = Math.max(0, Math.round(Number(source.positiveEvidence) || 0));
+    const negativeEvidence = Math.max(0, Math.round(Number(source.negativeEvidence) || 0));
+    const lastValidatedAt = stringOrFallback(source.lastValidatedAt, "").trim();
+    return { pattern, reason, weight, status, confidence, positiveEvidence, negativeEvidence, lastValidatedAt };
   }
 
   function normalizeMemoryRuleList(input, fallback = []) {
     const source = Array.isArray(input) ? input : Array.isArray(fallback) ? fallback : [];
-    return source.map(normalizeMemoryRule).filter(Boolean).slice(0, 6);
+    return source.map(normalizeMemoryRule).filter(Boolean).slice(0, 20);
+  }
+
+  function limitActiveMemoryRules(boostRules, penaltyRules) {
+    const combined = [...boostRules, ...penaltyRules]
+      .filter((rule) => rule.status === "active")
+      .sort((left, right) => {
+        if (left.confidence !== right.confidence) return right.confidence - left.confidence;
+        const leftEvidence = left.positiveEvidence + left.negativeEvidence;
+        const rightEvidence = right.positiveEvidence + right.negativeEvidence;
+        return rightEvidence - leftEvidence;
+      });
+    const allowed = new Set(combined.slice(0, 10));
+    const limit = (rules) => rules.map((rule) => (rule.status === "active" && !allowed.has(rule) ? { ...rule, status: "watch" } : rule));
+    return { boostRules: limit(boostRules), penaltyRules: limit(penaltyRules) };
+  }
+
+  function normalizeMemoryMergeStats(input, fallback) {
+    const source = isPlainObject(input) ? input : {};
+    const base = isPlainObject(fallback) ? fallback : DEFAULT_GROWTH_MEMORY_STATE.lastMergeStats;
+    const count = (value, fallbackValue) => Math.max(0, Math.round(Number(value ?? fallbackValue) || 0));
+    return {
+      added: count(source.added, base.added),
+      merged: count(source.merged, base.merged),
+      strengthened: count(source.strengthened, base.strengthened),
+      weakened: count(source.weakened, base.weakened),
+      paused: count(source.paused, base.paused),
+    };
   }
 
   function normalizeGrowthMemoryState(input, fallback) {
     const source = isPlainObject(input) ? input : {};
     const base = isPlainObject(fallback) ? fallback : DEFAULT_GROWTH_MEMORY_STATE;
+    const limitedRules = limitActiveMemoryRules(
+      normalizeMemoryRuleList(source.scoreBoostRules, base.scoreBoostRules),
+      normalizeMemoryRuleList(source.scorePenaltyRules, base.scorePenaltyRules)
+    );
 
     return {
       active: Boolean(source.active ?? base.active),
@@ -302,12 +351,16 @@
       sampleCount: Math.max(0, Math.round(Number(source.sampleCount ?? base.sampleCount) || 0)),
       positiveCount: Math.max(0, Math.round(Number(source.positiveCount ?? base.positiveCount) || 0)),
       noReplyCount: Math.max(0, Math.round(Number(source.noReplyCount ?? base.noReplyCount) || 0)),
+      learningRunCount: Math.max(0, Math.round(Number(source.learningRunCount ?? base.learningRunCount) || 0)),
+      lastBatchSampleCount: Math.max(0, Math.round(Number(source.lastBatchSampleCount ?? base.lastBatchSampleCount) || 0)),
+      learnedSampleKeys: normalizeStringList(source.learnedSampleKeys, base.learnedSampleKeys, 2000),
+      lastMergeStats: normalizeMemoryMergeStats(source.lastMergeStats, base.lastMergeStats),
       summary: stringOrFallback(source.summary, base.summary),
       effectiveKeywords: normalizeStringList(source.effectiveKeywords, base.effectiveKeywords),
       weakKeywords: normalizeStringList(source.weakKeywords, base.weakKeywords),
       accountRadarKeywords: normalizeStringList(source.accountRadarKeywords, base.accountRadarKeywords),
-      scoreBoostRules: normalizeMemoryRuleList(source.scoreBoostRules, base.scoreBoostRules),
-      scorePenaltyRules: normalizeMemoryRuleList(source.scorePenaltyRules, base.scorePenaltyRules),
+      scoreBoostRules: limitedRules.boostRules,
+      scorePenaltyRules: limitedRules.penaltyRules,
       replyStyleRules: normalizeStringList(source.replyStyleRules, base.replyStyleRules, 8),
       avoidReplyPatterns: normalizeStringList(source.avoidReplyPatterns, base.avoidReplyPatterns, 8),
       nextExperiment: stringOrFallback(source.nextExperiment, base.nextExperiment),

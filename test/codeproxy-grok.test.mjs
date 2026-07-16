@@ -84,9 +84,13 @@ test("buildStructuredGrokSignalPrompt asks for importable JSON only", () => {
   assert.match(prompt, /"accountRadar"/);
   assert.match(prompt, /confidence/);
   assert.match(prompt, /Never fabricate URLs/);
+  assert.match(prompt, /preserve the original post's language/);
+  assert.match(prompt, /Never translate text/);
+  assert.match(prompt, /"sourceLanguage"/);
+  assert.match(prompt, /sourceLanguage must describe the original post/);
 
   const englishPrompt = buildStructuredGrokSignalPrompt("find X signals", "en");
-  assert.match(englishPrompt, /Write all narrative fields in English/);
+  assert.match(englishPrompt, /Write all other narrative fields in English/);
 });
 test("extractXUsername accepts handles and X profile URLs", () => {
   assert.equal(extractXUsername("@ray_codeproxy/status/123"), "ray_codeproxy");

@@ -56,9 +56,9 @@ Selection rules:
 5. Exclude the operator's own account, product account, posts, and replies. Return external users, third-party discussions, competitor audiences, or potential customers only.
 
 Return 8–15 results when quality supports it. Use exactly one line per result and no explanation or Markdown table:
-X | author or account | post URL | concise summary + why it matters
+X | author or account | post URL | BCP-47 source language such as en or ja | concise source-post excerpt in the original post's language
 
-If quality is low, return fewer results. Never invent URLs.`;
+Do not translate the source-post excerpt into the interface language. If quality is low, return fewer results. Never invent URLs.`;
   }
 
   return `你是公开信号搜索助手。请在 X 上搜索最近 7 天的公开讨论，并只返回高质量候选信号。
@@ -79,9 +79,9 @@ If quality is low, return fewer results. Never invent URLs.`;
 5. 排除我自己的账号、我方产品账号、自己发布的帖子或回复；只找外部目标用户、第三方讨论、竞品受众或潜在客户。
 
 请返回 8-15 条结果。严格使用下面格式，每条一行，不要解释，不要 Markdown 表格：
-X | 作者或账号 | 帖子链接 | 一句话摘要 + 为什么值得处理
+X | 作者或账号 | 帖子链接 | 原帖语言代码（如 en、ja） | 保留原帖语言的精简原文
 
-如果找不到足够高质量结果，请少返回，不要编造链接。`;
+不要把原帖内容翻译成中文。如果找不到足够高质量结果，请少返回，不要编造链接。`;
 }
 
 export function parseGrokSignals(text: string): GrokSignal[] {

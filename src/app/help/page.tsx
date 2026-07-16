@@ -68,7 +68,7 @@ export default function HelpPage() {
       summary: tr("筛选机会、生成回复并记录结果，是把讨论真正变成增长行动的地方。", "Filter opportunities, draft replies, and record outcomes—the place where discussions become growth actions."),
       capabilities: [
         tr("按时间、处理状态、反馈状态和优先级筛选讨论。", "Filters discussions by time, execution status, feedback, and priority."),
-        tr("批量运行 AI 评分，并为选中的讨论生成回复草稿。", "Runs batch AI scoring and drafts replies for selected discussions."),
+        tr("批量运行 AI 评分，并按每条原帖的语言生成回复草稿。", "Runs batch AI scoring and drafts each reply in its source post's language."),
         tr("复制回复并跳转来源，减少在 App 和 X 之间来回操作。", "Copies a reply and opens its source in one action."),
         tr("保存已回复、被关注、被转发等反馈，用于后续复盘。", "Stores replies, follows, reposts, and other feedback for later learning."),
       ],

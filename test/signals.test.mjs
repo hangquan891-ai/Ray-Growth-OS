@@ -39,6 +39,47 @@ Reddit | SaaS builder | https://reddit.com/r/SaaS/comments/1 | looking for first
   });
 });
 
+test("parseSignalsFromText reads the short source-language marker from manual Grok rows", () => {
+  const [signal] = parseSignalsFromText(
+    "X | Shahzaib Imran | https://x.com/shahzaibimran_/status/1 | en | Depends on the work, honestly.",
+    { source: "grok", now: "2026-07-16T00:00:00.000Z" }
+  );
+
+  assert.equal(signal.sourceLanguage, "en");
+  assert.equal(signal.text, "Depends on the work, honestly.");
+});
+
+test("parseSignalsFromText recovers a source URL embedded in the note", () => {
+  const [signal] = parseSignalsFromText(
+    "X | Zaib |  | https://x.com/zaibpreneur/status/2075191744807710804 | Claude Code vs Cursor vs Codex",
+    { source: "grok", now: "2026-07-16T00:00:00.000Z" }
+  );
+
+  assert.equal(signal.url, "https://x.com/zaibpreneur/status/2075191744807710804");
+  assert.equal(signal.text, "Claude Code vs Cursor vs Codex");
+  assert.equal(signalDedupKey(signal), "url:https://x.com/zaibpreneur/status/2075191744807710804");
+});
+
+test("mergeSignals repairs legacy records whose URL was stored in text", () => {
+  const legacy = {
+    id: "txt_legacy",
+    source: "grok",
+    platform: "X",
+    author: "Zaib",
+    url: "",
+    text: "https://x.com/zaibpreneur/status/2075191744807710804 | workflow comparison",
+    importedAt: "2026-07-15T00:00:00.000Z",
+    status: "replied",
+    tags: [],
+  };
+
+  const [repaired] = mergeSignals([legacy], []).signals;
+  assert.equal(repaired.url, "https://x.com/zaibpreneur/status/2075191744807710804");
+  assert.equal(repaired.text, "workflow comparison");
+  assert.equal(repaired.status, "replied");
+  assert.equal(repaired.importedAt, "2026-07-15T00:00:00.000Z");
+});
+
 test("mergeSignals dedupes by normalized URL first", () => {
   const existing = parseSignalsFromText("X | maker | https://x.com/a/status/1 | old note", {
     source: "manual",
@@ -61,6 +102,39 @@ X | new maker | https://x.com/b/status/2 | new note
   assert.equal(signalDedupKey(result.duplicates[0]), "url:https://x.com/a/status/1");
 });
 
+test("mergeSignals upgrades a legacy localized summary when the same source is reimported", () => {
+  const existing = [
+    {
+      platform: "X",
+      author: "maker",
+      url: "https://x.com/a/status/1",
+      text: "这是一条中文摘要",
+      source: "grok",
+      status: "replied",
+      processedAt: "2026-07-15T08:00:00.000Z",
+    },
+  ];
+  const incoming = [
+    {
+      platform: "X",
+      author: "maker",
+      url: "https://x.com/a/status/1",
+      text: "The original English post excerpt",
+      sourceLanguage: "en",
+      source: "grok",
+    },
+  ];
+
+  const result = mergeSignals(existing, incoming);
+  assert.equal(result.imported.length, 0);
+  assert.equal(result.updated.length, 1);
+  assert.equal(result.duplicates.length, 0);
+  assert.equal(result.signals[0].text, "The original English post excerpt");
+  assert.equal(result.signals[0].sourceLanguage, "en");
+  assert.equal(result.signals[0].status, "replied");
+  assert.equal(result.signals[0].processedAt, "2026-07-15T08:00:00.000Z");
+});
+
 test("createSignalImportPreview reports parsed, importable, and duplicate counts", () => {
   const existing = parseSignalsFromText("X | maker | https://x.com/a/status/1 | old note", {
     source: "manual",
@@ -78,6 +152,7 @@ X | new maker | https://x.com/b/status/2 | new note
 
   assert.equal(preview.parsedCount, 2);
   assert.equal(preview.importableCount, 1);
+  assert.equal(preview.updatedCount, 0);
   assert.equal(preview.duplicateCount, 1);
   assert.equal(preview.importable[0].url, "https://x.com/b/status/2");
 });
@@ -137,6 +212,7 @@ test("parseStructuredSignalsFromText reads Grok JSON signals with metadata", () 
         author: "AI founder",
         url: "https://x.com/founder/status/9?utm_source=test",
         text: "asks how to find first users after building with AI Coding",
+        sourceLanguage: "en",
         reason: "clear target user and urgent distribution pain",
         tags: ["AI Coding", "first users"],
         confidence: 0.91,
@@ -151,6 +227,7 @@ test("parseStructuredSignalsFromText reads Grok JSON signals with metadata", () 
   assert.equal(result.signals.length, 1);
   assert.equal(result.signals[0].source, "grok");
   assert.equal(result.signals[0].url, "https://x.com/founder/status/9");
+  assert.equal(result.signals[0].sourceLanguage, "en");
   assert.equal(result.signals[0].reason, "clear target user and urgent distribution pain");
   assert.equal(result.signals[0].confidence, 91);
   assert.deepEqual(result.signals[0].tags, ["AI Coding", "first users"]);

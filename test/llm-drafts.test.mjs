@@ -10,6 +10,7 @@ const {
   buildDraftRequestInput,
   buildOpenAiDraftRequestBody,
   createDraftResponseSchema,
+  detectSourceLanguage,
   itemDraftKey,
   normalizeAiDraftResponse,
 } = require("../src/lib/llm-drafts.js");
@@ -55,7 +56,35 @@ test("buildDraftRequestInput includes queue items and positive style samples", (
   assert.equal(payload.items[0].localDrafts.outreachDraft, "local outreach");
   assert.equal(payload.styleSamples.length, 1);
   assert.equal(payload.styleSamples[0].actualReply, "share a concrete first-user loop");
-  assert.equal(payload.styleGuide.language, "English");
+  assert.equal(payload.locale, "en");
+  assert.equal(payload.styleGuide.language, "Match each item's source language");
+  assert.equal(payload.styleGuide.fallbackLanguage, "English");
+  assert.equal(payload.items[0].sourceLanguage, "English");
+});
+
+test("detectSourceLanguage recognizes common source scripts and languages", () => {
+  assert.equal(detectSourceLanguage("How do I find my first users?"), "English");
+  assert.equal(detectSourceLanguage("今天如何找到第一批用户？"), "Chinese (preserve the source's script)");
+  assert.equal(detectSourceLanguage("最初のユーザーをどう探せばいいですか？"), "Japanese");
+  assert.equal(detectSourceLanguage("Necesito encontrar clientes para mi producto"), "Spanish");
+  assert.equal(detectSourceLanguage("첫 사용자를 어떻게 찾을 수 있나요?"), "Korean");
+  assert.equal(detectSourceLanguage("https://x.com/example/status/1"), "Unclear");
+});
+
+test("buildDraftRequestInput assigns source language per item in a mixed batch", () => {
+  const payload = buildDraftRequestInput({
+    mode: "growth",
+    locale: "zh-CN",
+    items: [
+      { platform: "X", name: "en", note: "这是一条旧版中文摘要", sourceLanguage: "en" },
+      { platform: "X", name: "ja", note: "AIツールの使い方を知りたいです" },
+      { platform: "X", name: "es", note: "Necesito clientes para mi producto" },
+    ],
+  });
+
+  assert.equal(payload.styleGuide.fallbackLanguage, "Simplified Chinese");
+  assert.deepEqual(payload.items.map((item) => item.sourceLanguage), ["en", "Japanese", "Spanish"]);
+  assert.ok(payload.styleGuide.constraints[0].includes("item.sourceLanguage"));
 });
 
 test("normalizeAiDraftResponse and applyAiDraftOverrides update generated drafts only", () => {
@@ -117,6 +146,8 @@ test("buildOpenAiDraftRequestBody uses strict structured output per mode", () =>
   const schema = createDraftResponseSchema("outbound");
 
   assert.equal(body.model, "gpt-5.5");
+  assert.ok(body.input[0].content.includes("sourceLanguage identifies the original post language"));
+  assert.ok(body.input[0].content.includes("rationale and toneNotes"));
   assert.equal(body.text.format.name, "ray_growth_draft_response");
   assert.deepEqual(schema.properties.drafts.items.required, ["itemId", "draft", "rationale", "toneNotes"]);
   assert.equal(schema.properties.drafts.items.additionalProperties, false);

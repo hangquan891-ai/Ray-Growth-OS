@@ -12,6 +12,7 @@
     author: ["author", "name", "user", "account", "作者", "用户", "账号", "名称"],
     url: ["url", "link", "href", "链接", "地址"],
     text: ["text", "note", "summary", "content", "摘要", "内容", "备注"],
+    sourceLanguage: ["sourceLanguage", "source_language", "originalLanguage", "original_language", "language"],
     source: ["source", "来源"],
     tags: ["tags", "tag", "标签"],
     feedback: ["feedback", "feedback_status", "反馈", "反馈结果"],
@@ -53,12 +54,31 @@
     }
   }
 
+  function embeddedSourceUrl(value) {
+    const match = clean(value).match(/https?:\/\/[^\s|<>"'`，。；、）】]+/i);
+    return normalizeUrl(match?.[0]);
+  }
+
+  function removeEmbeddedSourceUrl(value) {
+    return clean(value)
+      .replace(/https?:\/\/[^\s|<>"'`，。；、）】]+/i, " ")
+      .replace(/^[\s|:：\-–—·]+/, "")
+      .trim();
+  }
+
   function normalizeText(value) {
     return clean(value).replace(/\s+/g, " ").toLowerCase();
   }
 
   function normalizeHeader(value) {
     return normalizeText(value).replace(/[\s_-]+/g, "");
+  }
+
+  function pipeSourceLanguage(value) {
+    const raw = clean(value);
+    const primary = raw.split("-")[0];
+    if (primary !== primary.toLowerCase()) return "";
+    return /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/.test(raw) ? raw : "";
   }
 
   function hashValue(value) {
@@ -102,12 +122,16 @@
   function createSignal(input, options = {}) {
     const platform = clean(input?.platform) || "X";
     const author = clean(input?.author ?? input?.name) || "Unnamed signal";
-    const url = normalizeUrl(input?.url ?? input?.link);
-    const text = clean(input?.text ?? input?.note ?? input?.summary ?? input?.content);
+    const suppliedUrl = normalizeUrl(input?.url ?? input?.link);
+    const suppliedText = clean(input?.text ?? input?.note ?? input?.summary ?? input?.content);
+    const recoveredUrl = suppliedUrl ? "" : embeddedSourceUrl(suppliedText);
+    const url = suppliedUrl || recoveredUrl;
+    const text = recoveredUrl ? removeEmbeddedSourceUrl(suppliedText) : suppliedText;
     const source = clean(input?.source ?? options.source) || DEFAULT_SOURCE;
     const importedAt = clean(input?.importedAt ?? options.now) || new Date().toISOString();
     const status = clean(input?.status) || DEFAULT_STATUS;
     const tags = splitTags(input?.tags);
+    const sourceLanguage = clean(input?.sourceLanguage ?? input?.originalLanguage ?? input?.language);
     const reason = clean(input?.reason ?? input?.why ?? input?.rationale);
     const confidence = normalizeConfidence(input?.confidence ?? input?.score);
     const processedAt = clean(input?.processedAt);
@@ -132,6 +156,7 @@
     };
 
     if (reason) signal.reason = reason;
+    if (sourceLanguage) signal.sourceLanguage = sourceLanguage;
     if (confidence !== null) signal.confidence = confidence;
     if (processedAt) signal.processedAt = processedAt;
     if (processedAction) signal.processedAction = processedAction;
@@ -196,8 +221,10 @@
   function rowToSignal(parts, options) {
     if (parts.length < 2 || isHeaderRow(parts)) return null;
 
-    const [platform = "X", author = "Unnamed signal", url = "", ...textParts] = parts;
-    const text = textParts.join(parts.length > 4 ? " | " : "").trim();
+    const [platform = "X", author = "Unnamed signal", url = "", ...rawTextParts] = parts;
+    const sourceLanguage = rawTextParts.length > 1 ? pipeSourceLanguage(rawTextParts[0]) : "";
+    const textParts = sourceLanguage ? rawTextParts.slice(1) : rawTextParts;
+    const text = textParts.join(" | ").trim();
     if (!clean(text) && !normalizeUrl(url)) return null;
 
     return createSignal(
@@ -205,6 +232,7 @@
         platform,
         author,
         url,
+        sourceLanguage,
         text: text || clean(url),
       },
       options
@@ -223,6 +251,7 @@
         url,
         text: text || clean(url),
         source: valueFromHeader(parts, headerFields, "source") || options.source,
+        sourceLanguage: valueFromHeader(parts, headerFields, "sourceLanguage"),
         tags: splitTags(valueFromHeader(parts, headerFields, "tags")),
         feedback: valueFromHeader(parts, headerFields, "feedback"),
         feedbackAt: valueFromHeader(parts, headerFields, "feedbackAt"),
@@ -355,6 +384,7 @@
           author: row.author ?? row.name ?? row.account ?? row.user,
           url: row.url ?? row.link ?? row.href,
           text: row.text ?? row.summary ?? row.note ?? row.content,
+          sourceLanguage: row.sourceLanguage ?? row.source_language ?? row.originalLanguage ?? row.original_language,
           reason: row.reason ?? row.why ?? row.rationale,
           tags: row.tags,
           confidence: row.confidence ?? row.score,
@@ -381,8 +411,10 @@
   function mergeSignals(existingSignals, incomingSignals) {
     const signals = [];
     const imported = [];
+    const updated = [];
     const duplicates = [];
     const seen = new Set();
+    const indexByKey = new Map();
 
     for (const signal of existingSignals ?? []) {
       const normalized = createSignal(signal);
@@ -392,6 +424,7 @@
       const key = signalDedupKey(normalized);
       if (!seen.has(key)) {
         seen.add(key);
+        indexByKey.set(key, signals.length);
         signals.push(normalized);
       }
     }
@@ -400,15 +433,30 @@
       const normalized = createSignal(signal);
       const key = signalDedupKey(normalized);
       if (seen.has(key)) {
+        const existingIndex = indexByKey.get(key);
+        const existing = Number.isInteger(existingIndex) ? signals[existingIndex] : null;
+        if (existing && normalized.sourceLanguage) {
+          const merged = {
+            ...existing,
+            text: normalized.text || existing.text,
+            sourceLanguage: normalized.sourceLanguage,
+          };
+          signals[existingIndex] = merged;
+          if (merged.text !== existing.text || merged.sourceLanguage !== existing.sourceLanguage) {
+            updated.push(merged);
+            continue;
+          }
+        }
         duplicates.push(normalized);
         continue;
       }
       seen.add(key);
+      indexByKey.set(key, signals.length);
       signals.push(normalized);
       imported.push(normalized);
     }
 
-    return { signals, imported, duplicates };
+    return { signals, imported, updated, duplicates };
   }
 
   function csvEscape(value) {
@@ -435,9 +483,11 @@
     return {
       parsedCount: candidates.length,
       importableCount: result.imported.length,
+      updatedCount: result.updated.length,
       duplicateCount: result.duplicates.length,
       candidates,
       importable: result.imported,
+      updated: result.updated,
       duplicates: result.duplicates,
     };
   }

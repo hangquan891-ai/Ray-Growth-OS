@@ -100,7 +100,8 @@ JSON shape:
       "platform": "X",
       "author": "account or author name",
       "url": "https://x.com/.../status/... or empty string if unknown",
-      "text": "one concise summary of the original discussion and pain point",
+      "text": "a concise excerpt or faithful condensation that preserves the original post's language",
+      "sourceLanguage": "BCP-47 language code for the original post, such as en, zh-CN, ja, es",
       "reason": "why this is worth replying to or saving",
       "tags": ["short topic tag", "intent tag"],
       "confidence": 0
@@ -111,9 +112,11 @@ Rules:
 - Return accountRadar when the task is account radar or competitor/KOL analysis; otherwise omit it or keep fields empty.
 - Return 8-15 high-quality signals when possible; return fewer if quality is low.
 - Never fabricate URLs. Use an empty string when the exact URL is unavailable.
+- sourceLanguage must describe the original post, not the interface or requested output language.
 - confidence must be an integer from 0 to 100.
+- text must preserve the original post's language. Never translate text into the interface language.
 - text and reason should be short enough to review quickly.
-- Write all narrative fields in ${outputLanguage}.
+- Write all other narrative fields in ${outputLanguage}.
 - If no useful signals are found, return {"signals":[]} or {"accountRadar": {...}, "signals":[]}.
 `;
   }

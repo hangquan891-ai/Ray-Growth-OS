@@ -16,6 +16,7 @@ type MemoryRequest = {
   mode?: MemoryMode;
   locale?: "zh-CN" | "en";
   profile?: unknown;
+  existingMemory?: unknown;
   sampleSummary?: unknown;
   samples?: unknown[];
   apiKey?: string;
@@ -94,6 +95,30 @@ function feedbackOf(sample: unknown) {
   return clean(source.feedback);
 }
 
+function sampleContainsKeyword(sample: unknown, keyword: string) {
+  const source = sample && typeof sample === "object" ? (sample as Record<string, unknown>) : {};
+  const tags = Array.isArray(source.tags) ? source.tags.map(clean) : [];
+  const text = [source.text, source.reason, source.usedDraft, ...tags].map(clean).join(" ").toLowerCase();
+  return text.includes(clean(keyword).toLowerCase());
+}
+
+function keywordEvidence(samples: unknown[], keyword: string) {
+  let positiveEvidence = 0;
+  let negativeEvidence = 0;
+  for (const sample of samples) {
+    if (!sampleContainsKeyword(sample, keyword)) continue;
+    const feedback = feedbackOf(sample);
+    if (["got_reply", "followed", "reshared"].includes(feedback)) positiveEvidence += 1;
+    if (feedback === "no_reply") negativeEvidence += 1;
+  }
+  const total = positiveEvidence + negativeEvidence;
+  return {
+    positiveEvidence,
+    negativeEvidence,
+    confidence: total > 0 ? Math.round(((Math.max(positiveEvidence, negativeEvidence) + 1) / (total + 2)) * 100) : 55,
+  };
+}
+
 function buildFallbackMemory(payload: { sampleSummary?: unknown; samples?: unknown[] }, locale: "zh-CN" | "en") {
   const samples = Array.isArray(payload.samples) ? payload.samples : [];
   const positiveSamples = samples.filter((sample) => ["got_reply", "followed", "reshared"].includes(feedbackOf(sample)));
@@ -119,11 +144,13 @@ function buildFallbackMemory(payload: { sampleSummary?: unknown; samples?: unkno
       pattern: keyword,
       reason: english ? "This pattern appeared more often in samples with continued interaction." : "历史反馈样本里更容易产生继续互动，下一轮优先加权。",
       weight: 6,
+      ...keywordEvidence(samples, keyword),
     })),
     scorePenaltyRules: weakKeywords.slice(0, 4).map((keyword) => ({
       pattern: keyword,
       reason: english ? "This pattern appeared more often in no-reply samples." : "历史样本里更容易无回复，下一轮先降低优先级。",
       weight: 4,
+      ...keywordEvidence(samples, keyword),
     })),
     replyStyleRules: english
       ? ["Lead with one actionable observation.", "Use a question only when it helps continue a relevant conversation.", "Address the stated pain point instead of giving generic agreement."]
@@ -176,6 +203,7 @@ export async function POST(request: Request) {
     mode,
     locale,
     profile: body.profile,
+    existingMemory: body.existingMemory,
     sampleSummary: body.sampleSummary,
     samples,
   };

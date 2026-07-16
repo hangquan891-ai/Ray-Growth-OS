@@ -204,6 +204,7 @@ test("normalizeWorkbenchState keeps structured signals by mode", () => {
           importedAt: "2026-07-06T00:00:00.000Z",
           status: "new",
           tags: [],
+          sourceLanguage: "en",
           reason: "strong buying intent",
           confidence: 88,
           processedAt: "2026-07-07T08:00:00.000Z",
@@ -221,6 +222,7 @@ test("normalizeWorkbenchState keeps structured signals by mode", () => {
 
   assert.equal(normalized.signals.growth.length, 1);
   assert.equal(normalized.signals.growth[0].author, "AI founder");
+  assert.equal(normalized.signals.growth[0].sourceLanguage, "en");
   assert.equal(normalized.signals.growth[0].reason, "strong buying intent");
   assert.equal(normalized.signals.growth[0].confidence, 88);
   assert.equal(normalized.signals.growth[0].processedAt, "2026-07-07T08:00:00.000Z");
@@ -342,11 +344,15 @@ test("normalizeWorkbenchState keeps growth memory in local state", () => {
       sampleCount: 4,
       positiveCount: 3,
       noReplyCount: 1,
+      learningRunCount: 2,
+      lastBatchSampleCount: 1,
+      learnedSampleKeys: ["sample:a", "sample:b"],
+      lastMergeStats: { added: 1, merged: 1, strengthened: 1, weakened: 0, paused: 0 },
       summary: "First-user pain works best.",
       effectiveKeywords: ["first users", "0 traffic"],
       weakKeywords: ["generic news"],
       accountRadarKeywords: ["Cursor alternative"],
-      scoreBoostRules: [{ pattern: "first users", reason: "got replies", weight: 8 }],
+      scoreBoostRules: [{ pattern: "first users", reason: "got replies", weight: 8, status: "active", confidence: 80, positiveEvidence: 3, negativeEvidence: 0, lastValidatedAt: "2026-07-08T01:00:00.000Z" }],
       scorePenaltyRules: [{ pattern: "giveaway", reason: "low intent", weight: 6 }],
       replyStyleRules: ["Start with one concrete observation"],
       avoidReplyPatterns: ["Do not pitch immediately"],
@@ -360,6 +366,10 @@ test("normalizeWorkbenchState keeps growth memory in local state", () => {
   assert.equal(normalized.growthMemory.active, true);
   assert.equal(normalized.growthMemory.summary, "First-user pain works best.");
   assert.equal(normalized.growthMemory.scoreBoostRules[0].weight, 8);
+  assert.equal(normalized.growthMemory.scoreBoostRules[0].confidence, 80);
+  assert.equal(normalized.growthMemory.learningRunCount, 2);
+  assert.deepEqual(normalized.growthMemory.learnedSampleKeys, ["sample:a", "sample:b"]);
+  assert.equal(serialized.growthMemory.lastMergeStats.merged, 1);
   assert.equal(serialized.growthMemory.effectiveKeywords[0], "first users");
   assert.equal(DEFAULT_GROWTH_MEMORY_STATE.active, false);
 });
