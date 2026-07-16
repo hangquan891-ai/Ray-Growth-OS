@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 
 import { extractResponseOutputText } from "@/lib/llm-scoring";
+import { classifyGrokRequestFailure } from "@/lib/grok-diagnostics";
 import {
   GROWTH_MEMORY_SAMPLE_LIMIT,
   buildOpenAiGrowthMemoryRequestBody,
   normalizeGrowthMemoryResponse,
 } from "@/lib/growth-memory";
+import { recordAiDiagnostic } from "@/lib/local-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const GROWTH_MEMORY_TIMEOUT_MS = 45000;
+const GROWTH_MEMORY_ENDPOINT = "https://codeproxy.dev/v1/responses";
 
 type MemoryMode = "outbound" | "growth";
 
@@ -37,6 +42,62 @@ function errorMessage(value: unknown, fallback: string) {
     if (typeof error?.message === "string" && error.message.trim()) return error.message;
   }
   return fallback;
+}
+
+function saveMemoryDiagnostic(input: Parameters<typeof recordAiDiagnostic>[0]) {
+  try {
+    const diagnostic = recordAiDiagnostic(input);
+    const log = {
+      id: diagnostic.id,
+      action: input.action,
+      durationMs: input.durationMs,
+      httpStatus: input.httpStatus ?? null,
+      model: input.model,
+      outcome: input.outcome,
+      errorMessage: input.errorMessage || "",
+    };
+    if (input.outcome === "success") console.info("[memory-diagnostic]", log);
+    else console.error("[memory-diagnostic]", log);
+    return diagnostic;
+  } catch (error) {
+    console.error("Could not save growth-memory diagnostic.", error);
+    return null;
+  }
+}
+
+function responseMetadata(response: Response) {
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+  };
+}
+
+function providerFailureDetails(status: number, providerMessage: string, locale: "zh-CN" | "en") {
+  const english = locale === "en";
+  if (status === 401 || status === 403) {
+    return {
+      message: english ? `codeproxy rejected the credentials (HTTP ${status}).` : `codeproxy 拒绝了当前密钥或权限（HTTP ${status}）。`,
+      suggestion: english ? "Check the API key, account permissions, and model access." : "请检查 API 密钥、账号权限和所选模型是否可用。",
+    };
+  }
+  if (status === 429) {
+    return {
+      message: english ? "codeproxy rate-limited the request or the account quota is insufficient (HTTP 429)." : "codeproxy 对请求进行了限流，或当前账号额度不足（HTTP 429）。",
+      suggestion: english ? "Wait before retrying and check the account quota." : "请稍后重试，并检查中转账号额度。",
+    };
+  }
+  if (status >= 500) {
+    return {
+      message: english ? `codeproxy returned a server error (HTTP ${status}).` : `codeproxy 返回了服务端错误（HTTP ${status}）。`,
+      suggestion: english ? "Retry later. If it persists, inspect the raw response in the diagnostic log." : "请稍后重试；若持续失败，请从完整日志查看原始响应。",
+    };
+  }
+  return {
+    message: english ? `codeproxy returned HTTP ${status}.` : `codeproxy 返回 HTTP ${status}。`,
+    suggestion: english ? "Inspect the raw provider response in the diagnostic log." : "请从完整日志查看中转服务的原始响应。",
+    technicalMessage: providerMessage,
+  };
 }
 
 function stripJsonFence(value: string) {
@@ -193,11 +254,6 @@ export async function POST(request: Request) {
   }
 
   const model = clean(body.model) || process.env.CODEPROXY_MEMORY_MODEL?.trim() || process.env.CODEPROXY_AI_MODEL?.trim() || "gpt-5.5";
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
-
-  let response: Response;
-  let responseJson: unknown;
   const locale: "zh-CN" | "en" = body.locale === "en" ? "en" : "zh-CN";
   const payload = {
     mode,
@@ -207,40 +263,108 @@ export async function POST(request: Request) {
     sampleSummary: body.sampleSummary,
     samples,
   };
+  const upstreamRequest = buildOpenAiGrowthMemoryRequestBody({ model, payload });
+  const requestBody = JSON.stringify(upstreamRequest);
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GROWTH_MEMORY_TIMEOUT_MS);
+
+  let response: Response;
+  let responseJson: unknown = {};
+  let responseBody = "";
 
   try {
-    response = await fetch("https://codeproxy.dev/v1/responses", {
+    response = await fetch(GROWTH_MEMORY_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(buildOpenAiGrowthMemoryRequestBody({ model, payload })),
+      body: requestBody,
       signal: controller.signal,
     });
-    responseJson = await response.json().catch(() => ({}));
+    responseBody = await response.text();
+    if (responseBody.trim()) {
+      try {
+        responseJson = JSON.parse(responseBody) as unknown;
+      } catch {}
+    }
   } catch (error) {
-    clearTimeout(timeout);
+    const failure = classifyGrokRequestFailure(error, { locale, timeoutMs: GROWTH_MEMORY_TIMEOUT_MS });
+    const failureMessage = failure.message
+      .replace("Grok result", "growth-memory result")
+      .replace("Grok 结果", "增长记忆结果");
+    const diagnostic = saveMemoryDiagnostic({
+      action: "memory",
+      durationMs: Date.now() - startedAt,
+      httpStatus: null,
+      model,
+      outcome: failure.outcome,
+      requestBody,
+      responseBody,
+      responseShape: {
+        request: {
+          url: GROWTH_MEMORY_ENDPOINT,
+          method: "POST",
+          headers: { authorization: "[REDACTED]", "content-type": "application/json" },
+          timeoutMs: GROWTH_MEMORY_TIMEOUT_MS,
+        },
+        response: null,
+        errorChain: failure.errorChain,
+      },
+      errorMessage: `${failureMessage} ${failure.technicalMessage}`,
+    });
     return NextResponse.json(
       {
         ok: false,
         configured: true,
-        status: "request_failed",
-        message: error instanceof Error ? error.message : "增长记忆生成请求失败。",
+        status: failure.status,
+        diagnosticId: diagnostic?.id,
+        message: failureMessage,
+        technicalMessage: failure.technicalMessage,
+        suggestion: failure.suggestion,
+        retryable: failure.retryable,
       },
-      { status: 502 }
+      { status: failure.status === "upstream_timeout" ? 504 : 502 }
     );
   } finally {
     clearTimeout(timeout);
   }
 
+  const responseShape = {
+    request: {
+      url: GROWTH_MEMORY_ENDPOINT,
+      method: "POST",
+      headers: { authorization: "[REDACTED]", "content-type": "application/json" },
+      timeoutMs: GROWTH_MEMORY_TIMEOUT_MS,
+    },
+    response: responseMetadata(response),
+  };
+
   if (!response.ok) {
+    const providerMessage = errorMessage(responseJson, responseBody.trim() || "codeproxy growth-memory endpoint returned an error.");
+    const failure = providerFailureDetails(response.status, providerMessage, locale);
+    const diagnostic = saveMemoryDiagnostic({
+      action: "memory",
+      durationMs: Date.now() - startedAt,
+      httpStatus: response.status,
+      model,
+      outcome: "provider_error",
+      requestBody,
+      responseBody,
+      responseShape,
+      errorMessage: providerMessage,
+    });
     return NextResponse.json(
       {
         ok: false,
         configured: true,
         status: "codeproxy_error",
-        message: errorMessage(responseJson, "codeproxy GPT-5.5 增长记忆接口返回错误。"),
+        diagnosticId: diagnostic?.id,
+        message: failure.message,
+        technicalMessage: failure.technicalMessage || providerMessage,
+        suggestion: failure.suggestion,
+        retryable: response.status === 429 || response.status >= 500,
       },
       { status: response.status }
     );
@@ -250,10 +374,22 @@ export async function POST(request: Request) {
   const parsed = outputText ? parsePossibleJson(outputText) : null;
   const memorySource = parsed && typeof parsed === "object" ? parsed : buildFallbackMemory(payload, payload.locale);
   const memory = normalizeGrowthMemoryResponse(memorySource, payload);
+  const diagnostic = saveMemoryDiagnostic({
+    action: "memory",
+    durationMs: Date.now() - startedAt,
+    httpStatus: response.status,
+    model,
+    outcome: parsed ? "success" : "fallback",
+    requestBody,
+    responseBody,
+    responseShape,
+    errorMessage: parsed ? "" : "The provider response did not contain a parseable growth-memory JSON object; local fallback was used.",
+  });
 
   return NextResponse.json({
     ok: true,
     configured: true,
+    diagnosticId: diagnostic?.id,
     model: parsed ? model : `${model} / 本地兜底`,
     message: parsed ? undefined : "AI 返回格式不标准，已用当前反馈样本生成本地增长记忆。",
     memory,

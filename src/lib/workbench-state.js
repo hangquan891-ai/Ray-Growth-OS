@@ -343,19 +343,31 @@
       normalizeMemoryRuleList(source.scoreBoostRules, base.scoreBoostRules),
       normalizeMemoryRuleList(source.scorePenaltyRules, base.scorePenaltyRules)
     );
+    const generatedAt = stringOrFallback(source.generatedAt, base.generatedAt);
+    const summary = stringOrFallback(source.summary, base.summary);
+    const sampleCount = Math.max(0, Math.round(Number(source.sampleCount ?? base.sampleCount) || 0));
+    const hasMemory = Boolean(
+      generatedAt
+      || summary
+      || sampleCount
+      || limitedRules.boostRules.length
+      || limitedRules.penaltyRules.length
+      || normalizeStringList(source.replyStyleRules, base.replyStyleRules, 8).length
+      || normalizeStringList(source.avoidReplyPatterns, base.avoidReplyPatterns, 8).length
+    );
 
     return {
-      active: Boolean(source.active ?? base.active),
-      generatedAt: stringOrFallback(source.generatedAt, base.generatedAt),
-      appliedAt: stringOrFallback(source.appliedAt, base.appliedAt),
-      sampleCount: Math.max(0, Math.round(Number(source.sampleCount ?? base.sampleCount) || 0)),
+      active: hasMemory,
+      generatedAt,
+      appliedAt: stringOrFallback(source.appliedAt, base.appliedAt) || (hasMemory ? generatedAt : ""),
+      sampleCount,
       positiveCount: Math.max(0, Math.round(Number(source.positiveCount ?? base.positiveCount) || 0)),
       noReplyCount: Math.max(0, Math.round(Number(source.noReplyCount ?? base.noReplyCount) || 0)),
       learningRunCount: Math.max(0, Math.round(Number(source.learningRunCount ?? base.learningRunCount) || 0)),
       lastBatchSampleCount: Math.max(0, Math.round(Number(source.lastBatchSampleCount ?? base.lastBatchSampleCount) || 0)),
       learnedSampleKeys: normalizeStringList(source.learnedSampleKeys, base.learnedSampleKeys, 2000),
       lastMergeStats: normalizeMemoryMergeStats(source.lastMergeStats, base.lastMergeStats),
-      summary: stringOrFallback(source.summary, base.summary),
+      summary,
       effectiveKeywords: normalizeStringList(source.effectiveKeywords, base.effectiveKeywords),
       weakKeywords: normalizeStringList(source.weakKeywords, base.weakKeywords),
       accountRadarKeywords: normalizeStringList(source.accountRadarKeywords, base.accountRadarKeywords),

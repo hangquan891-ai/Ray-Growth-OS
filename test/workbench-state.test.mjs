@@ -373,3 +373,21 @@ test("normalizeWorkbenchState keeps growth memory in local state", () => {
   assert.equal(serialized.growthMemory.effectiveKeywords[0], "first users");
   assert.equal(DEFAULT_GROWTH_MEMORY_STATE.active, false);
 });
+
+test("normalizeWorkbenchState automatically enables legacy generated memory", () => {
+  const normalized = normalizeWorkbenchState({
+    version: CURRENT_VERSION,
+    mode: "growth",
+    forms: fallbackForms,
+    growthMemory: {
+      active: false,
+      generatedAt: "2026-07-16T06:00:00.000Z",
+      appliedAt: "",
+      sampleCount: 3,
+      summary: "Legacy generated memory",
+    },
+  }, { mode: "growth", forms: fallbackForms });
+
+  assert.equal(normalized.growthMemory.active, true);
+  assert.equal(normalized.growthMemory.appliedAt, "2026-07-16T06:00:00.000Z");
+});

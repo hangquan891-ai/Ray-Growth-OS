@@ -439,8 +439,13 @@ type GrowthMemoryState = {
 type GrowthMemoryApiResponse = {
   ok?: boolean;
   configured?: boolean;
+  status?: string;
+  diagnosticId?: number;
   model?: string;
   message?: string;
+  technicalMessage?: string;
+  suggestion?: string;
+  retryable?: boolean;
   memory?: GrowthMemoryState;
 };
 
@@ -450,6 +455,14 @@ type GrowthMemoryRunResult = {
   model: string;
   stats: GrowthMemoryMergeStats;
 };
+
+type GrowthMemoryRetryProgress = {
+  maxRetries: number;
+  reason: string;
+  retryNumber: number;
+};
+
+type GrowthMemoryRetryHandler = (progress: GrowthMemoryRetryProgress) => void;
 
 type XFeedbackPullUpdate = {
   itemId: string;
@@ -2094,7 +2107,7 @@ export default function Home() {
     replaceModeSignals(nextSignals);
   }
 
-  async function runGrowthMemoryLearning(): Promise<GrowthMemoryRunResult> {
+  async function runGrowthMemoryLearning(onRetry?: GrowthMemoryRetryHandler): Promise<GrowthMemoryRunResult> {
     const payload = buildGrowthMemoryRequestInput({
       mode,
       locale,
@@ -2125,18 +2138,74 @@ export default function Home() {
       throw new Error("请先到设置页面配置 GPT-5.5 / codeproxy 密钥，再生成增长记忆。");
     }
 
-    const response = await fetch("/api/memory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, apiKey: aiConfig.apiKey, model: aiConfig.model }),
-    });
-    const data = (await response.json().catch(() => ({ message: "增长记忆生成请求失败。" }))) as GrowthMemoryApiResponse;
+    const requestBody = JSON.stringify({ ...payload, apiKey: aiConfig.apiKey, model: aiConfig.model });
+    let data: GrowthMemoryApiResponse = {};
+    let lastMessage = locale === "en" ? "Growth-memory generation failed." : "增长记忆生成失败。";
+    let lastDiagnosticId: number | undefined;
 
-    if (!response.ok || !data.ok || !data.memory) {
-      throw new Error(data.message || "增长记忆生成失败，请稍后再试。");
+    for (let attempt = 0; attempt <= PROFILE_MAX_RETRIES; attempt += 1) {
+      let responseStatus = 0;
+      try {
+        const response = await fetch("/api/memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: requestBody,
+        });
+        responseStatus = response.status;
+        data = (await response.json().catch(() => ({
+          message: locale === "en" ? "The growth-memory service returned an unreadable response." : "增长记忆服务返回了无法读取的响应。",
+          retryable: response.ok || response.status >= 500,
+          status: "invalid_response",
+        }))) as GrowthMemoryApiResponse;
+
+        if (response.ok && data.ok && data.memory) break;
+
+        lastDiagnosticId = data.diagnosticId;
+        lastMessage = grokFailureMessage(data, locale === "en" ? "Growth-memory generation failed." : "增长记忆生成失败。", locale);
+        const retryable = isRetryableProfileFailure({
+          httpStatus: responseStatus,
+          retryable: data.retryable,
+          status: data.status,
+        });
+        if (!retryable) {
+          const error = new Error(lastMessage) as Error & { diagnosticId?: number };
+          error.diagnosticId = lastDiagnosticId;
+          throw error;
+        }
+      } catch (error) {
+        if (error instanceof Error && responseStatus > 0) throw error;
+        lastMessage = error instanceof Error && error.message
+          ? error.message
+          : locale === "en"
+            ? "The growth-memory request could not reach the local service."
+            : "增长记忆请求未能连接到本地服务。";
+      }
+
+      const retryNumber = attempt + 1;
+      if (retryNumber > PROFILE_MAX_RETRIES) {
+        const error = new Error(locale === "en"
+          ? `Still unsuccessful after ${PROFILE_MAX_RETRIES} automatic retries. Last error: ${lastMessage}`
+          : `自动重试 ${PROFILE_MAX_RETRIES} 次后仍未成功。最后一次错误：${lastMessage}`) as Error & { diagnosticId?: number };
+        error.diagnosticId = lastDiagnosticId;
+        throw error;
+      }
+
+      onRetry?.({ maxRetries: PROFILE_MAX_RETRIES, reason: lastMessage, retryNumber });
+      await new Promise((resolve) => window.setTimeout(resolve, profileRetryDelayMs(retryNumber)));
     }
 
-    const nextMemory = mergeGrowthMemoryState(growthMemory, data.memory, payload) as GrowthMemoryState;
+    if (!data.ok || !data.memory) {
+      const error = new Error(lastMessage) as Error & { diagnosticId?: number };
+      error.diagnosticId = lastDiagnosticId;
+      throw error;
+    }
+
+    const mergedMemory = mergeGrowthMemoryState(growthMemory, data.memory, payload) as GrowthMemoryState;
+    const nextMemory = normalizeGrowthMemoryState({
+      ...mergedMemory,
+      active: true,
+      appliedAt: new Date().toISOString(),
+    }) as GrowthMemoryState;
     setGrowthMemory(nextMemory);
     return {
       count: payload.samples.length,
@@ -2144,14 +2213,6 @@ export default function Home() {
       model: data.model || "AI",
       stats: nextMemory.lastMergeStats,
     };
-  }
-
-  function applyGrowthMemory() {
-    setGrowthMemory((previous) => normalizeGrowthMemoryState({ ...previous, active: true, appliedAt: new Date().toISOString() }) as GrowthMemoryState);
-  }
-
-  function pauseGrowthMemory() {
-    setGrowthMemory((previous) => normalizeGrowthMemoryState({ ...previous, active: false }) as GrowthMemoryState);
   }
 
   function clearGrowthMemory() {
@@ -2356,8 +2417,6 @@ export default function Home() {
                   runAiScoring={runAiScoring}
                   runAiDrafting={runAiDrafting}
                   runGrowthMemoryLearning={runGrowthMemoryLearning}
-                  applyGrowthMemory={applyGrowthMemory}
-                  pauseGrowthMemory={pauseGrowthMemory}
                   clearGrowthMemory={clearGrowthMemory}
                   onFindPeople={() => setActiveTab("search")}
                   growthMemory={growthMemory}
@@ -2988,8 +3047,6 @@ function EngageTab({
   runAiScoring,
   runAiDrafting,
   runGrowthMemoryLearning,
-  applyGrowthMemory,
-  pauseGrowthMemory,
   clearGrowthMemory,
   onFindPeople,
   growthMemory,
@@ -3013,9 +3070,7 @@ function EngageTab({
   styleSampleCount: number;
   runAiScoring: (items?: QueueItem[]) => Promise<AiScoreRunResult>;
   runAiDrafting: (items?: QueueItem[]) => Promise<AiDraftRunResult>;
-  runGrowthMemoryLearning: () => Promise<GrowthMemoryRunResult>;
-  applyGrowthMemory: () => void;
-  pauseGrowthMemory: () => void;
+  runGrowthMemoryLearning: (onRetry?: GrowthMemoryRetryHandler) => Promise<GrowthMemoryRunResult>;
   clearGrowthMemory: () => void;
   onFindPeople: () => void;
   growthMemory: GrowthMemoryState;
@@ -3555,8 +3610,6 @@ function EngageTab({
           memory={growthMemory}
           signals={signals}
           onRunLearning={runGrowthMemoryLearning}
-          onApplyMemory={applyGrowthMemory}
-          onPauseMemory={pauseGrowthMemory}
           onClearMemory={clearGrowthMemory}
         />
       ) : null}
@@ -5632,20 +5685,18 @@ function GrowthMemoryPanel({
   memory,
   signals,
   onRunLearning,
-  onApplyMemory,
-  onPauseMemory,
   onClearMemory,
 }: {
   mode: Mode;
   memory: GrowthMemoryState;
   signals: Signal[];
-  onRunLearning: () => Promise<GrowthMemoryRunResult>;
-  onApplyMemory: () => void;
-  onPauseMemory: () => void;
+  onRunLearning: (onRetry?: GrowthMemoryRetryHandler) => Promise<GrowthMemoryRunResult>;
   onClearMemory: () => void;
 }) {
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-  const [message, setMessage] = useState("标记反馈后，让 GPT-5.5 总结哪些人、关键词和话术真的有效，再应用到下一轮排序和找人。");
+  const [diagnosticId, setDiagnosticId] = useState<number | null>(null);
+  const [retryProgress, setRetryProgress] = useState<GrowthMemoryRetryProgress | null>(null);
+  const [message, setMessage] = useState("标记反馈后，让 GPT-5.5 总结哪些人、关键词和话术真的有效，并自动应用到下一轮排序和找人。");
   const feedbackSignals = useMemo(() => signals.filter((signal) => normalizeFeedbackStatus(signal.feedback) !== "none"), [signals]);
   const positiveCount = feedbackSignals.filter((signal) => ["got_reply", "followed", "reshared"].includes(normalizeFeedbackStatus(signal.feedback))).length;
   const noReplyCount = feedbackSignals.filter((signal) => normalizeFeedbackStatus(signal.feedback) === "no_reply").length;
@@ -5657,40 +5708,40 @@ function GrowthMemoryPanel({
 
   async function handleRunLearning() {
     setState("loading");
+    setDiagnosticId(null);
+    setRetryProgress(null);
     setMessage("正在让 GPT-5.5 从反馈样本里提炼增长记忆...");
     try {
-      const result = await onRunLearning();
+      const result = await onRunLearning((progress) => {
+        setRetryProgress(progress);
+        setMessage(`正在进行第 ${progress.retryNumber}/${progress.maxRetries} 次自动重试。每次请求单独计算超时。上一次错误：${progress.reason}`);
+      });
       setState("idle");
-      const successMessage = `已用 ${result.model} 学习 ${result.count} 条新反馈，累计 ${result.totalCount} 条；新增 ${result.stats.added}、合并 ${result.stats.merged}、增强 ${result.stats.strengthened}、降级 ${result.stats.weakened}、暂停 ${result.stats.paused} 条规则。确认后点“应用到下一轮”。`;
+      setDiagnosticId(null);
+      setRetryProgress(null);
+      const successMessage = `已用 ${result.model} 学习 ${result.count} 条新反馈，累计 ${result.totalCount} 条；新增 ${result.stats.added}、合并 ${result.stats.merged}、增强 ${result.stats.strengthened}、降级 ${result.stats.weakened}、暂停 ${result.stats.paused} 条规则，并已自动应用到下一轮。`;
       setMessage(successMessage);
       showToast(successMessage, "success");
     } catch (error) {
       setState("error");
+      setRetryProgress(null);
+      const nextDiagnosticId = Number((error as { diagnosticId?: unknown })?.diagnosticId || 0);
+      setDiagnosticId(nextDiagnosticId > 0 ? nextDiagnosticId : null);
       const errorMessage = error instanceof Error ? error.message : "增长记忆生成失败，请稍后重试。";
       setMessage(errorMessage);
       showToast(errorMessage, "error");
     }
   }
 
-  function handleApply() {
-    onApplyMemory();
-    setState("idle");
-    setMessage("增长记忆已应用。下一轮队列排序、Grok Prompt 和 AI 草稿会参考这份反馈经验。");
-    showToast("增长记忆已应用到下一轮。", "success");
-  }
-
-  function handlePause() {
-    onPauseMemory();
-    setState("idle");
-    setMessage("已暂停应用增长记忆。记忆仍保留，可以随时重新应用。");
-    showToast("已暂停应用增长记忆。", "info");
-  }
-
   function handleClear() {
+    const confirmed = window.confirm("确定要重置全部增长记忆吗？累计总结、规则和已学习标记都会清除，但互动队列和反馈记录会保留，之后可以重新生成。");
+    if (!confirmed) return;
     onClearMemory();
     setState("idle");
-    setMessage("已清空增长记忆。反馈记录仍在，后续可以重新学习。");
-    showToast("已清空增长记忆。", "info");
+    setDiagnosticId(null);
+    setRetryProgress(null);
+    setMessage("已重置全部增长记忆。互动队列和反馈记录仍在，现在可以重新生成并应用。");
+    showToast("已重置全部增长记忆，可以重新生成。", "info");
   }
 
   return (
@@ -5703,29 +5754,27 @@ function GrowthMemoryPanel({
           <CardTitle className="mt-3 text-xl text-white">让反馈反过来改规则</CardTitle>
           <CardDescription className="mt-2 text-white/55">从已处理信号的反馈里学习：哪些关键词该加权、哪些要降权、回复草稿该保留什么风格。</CardDescription>
         </div>
-        <Badge variant="outline" className={cn("rounded-md", memory.active ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-white/[0.08] bg-white/[0.04] text-white/55")}>
-          {memory.active ? "已应用" : "未应用"}
+        <Badge variant="outline" className={cn("rounded-md", hasMemory ? "border-emerald-500/10 bg-emerald-500/10 text-emerald-300" : "border-white/[0.08] bg-white/[0.04] text-white/55")}>
+          {hasMemory ? "已启用" : "未生成"}
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-4 p-4">
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-          <p className={cn("rounded-md border px-3 py-2 text-sm leading-6", state === "error" ? "border-rose-400/20 bg-rose-500/10 text-rose-200" : "border-white/[0.08] bg-[#0d0d10]/55 text-white/60")}>{message}</p>
+          <div className={cn("rounded-md border px-3 py-2 text-sm leading-6", state === "error" ? "border-rose-400/20 bg-rose-500/10 text-rose-200" : "border-white/[0.08] bg-[#0d0d10]/55 text-white/60")}>
+            <p>{message}</p>
+            {diagnosticId ? (
+              <a className="mt-1 inline-flex font-semibold text-rose-100 underline underline-offset-4 hover:text-white" href={`/api/diagnostics/memory?id=${diagnosticId}`} target="_blank" rel="noreferrer">
+                查看完整日志 #{diagnosticId}
+              </a>
+            ) : null}
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button className="tech-cta h-9" onClick={() => void handleRunLearning()} disabled={state === "loading" || feedbackSignals.length === 0}>
               {state === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-              {hasMemory ? "增长到下一轮" : "生成增长记忆"}
+              {retryProgress ? `重试 ${retryProgress.retryNumber}/${retryProgress.maxRetries}` : hasMemory ? "学习新反馈并应用" : "生成并应用"}
             </Button>
-            {memory.active ? (
-              <Button variant="outline" className="tech-secondary h-9" onClick={handlePause} disabled={!hasMemory || state === "loading"}>
-                暂停应用
-              </Button>
-            ) : (
-              <Button variant="outline" className="tech-secondary h-9" onClick={handleApply} disabled={!hasMemory || state === "loading"}>
-                应用到下一轮
-              </Button>
-            )}
             <Button variant="outline" className="tech-secondary h-9" onClick={handleClear} disabled={!hasMemory || state === "loading"}>
-              清空记忆
+              重置全部记忆
             </Button>
           </div>
         </div>
