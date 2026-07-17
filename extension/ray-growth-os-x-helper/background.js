@@ -5,6 +5,11 @@ const APP_URLS = [
   "http://127.0.0.1:3001/*",
 ];
 
+const X_URLS = [
+  "https://x.com/*",
+  "https://twitter.com/*",
+];
+
 const REPLY_SCAN_BATCH_SIZE = 20;
 const REPLY_SCAN_PAGE_SIZE = 50;
 
@@ -166,6 +171,31 @@ async function findAppTab() {
   return tabs.find((tab) => tab.id) || null;
 }
 
+async function discoverSelfUsernameFromOpenPages() {
+  const sources = [
+    { urls: APP_URLS, message: { type: "RAY_READ_SELF_USERNAME" }, bridge: "app-bridge.js" },
+    { urls: X_URLS, message: { type: "RAY_READ_SELF_USERNAME" }, bridge: "x-bridge.js" },
+  ];
+
+  for (const source of sources) {
+    const tabs = await queryTabs({ url: source.urls });
+    for (const tab of tabs) {
+      if (!tab?.id) continue;
+      try {
+        const response = await sendToTabWithInjection(tab, source.message, source.bridge);
+        const username = normalizeUsername(response?.selfUsername);
+        if (!isValidXUsername(username)) continue;
+        await storageSet({ raySelfUsername: username });
+        return username;
+      } catch {
+        // Try the next open App/X tab. Manual input remains the final fallback.
+      }
+    }
+  }
+
+  return "";
+}
+
 function signalKey(item) {
   return clean(item.itemId) || normalizeUrl(item.url || item.sourceUrl) || `${clean(item.mode)}:${clean(item.author)}:${normalizeText(item.text).slice(0, 80)}`;
 }
@@ -281,19 +311,46 @@ function shouldCaptureFreshReply(scan) {
 
 async function processScan(scan, tabId) {
   const stored = await storageGet(["rayQueue", "rayPendingByTab", "raySelfUsername", "rayRecentSource"]);
-  const queue = Array.isArray(stored.rayQueue) ? stored.rayQueue : [];
-  const selfUsername = normalizeUsername(stored.raySelfUsername);
+  let queue = Array.isArray(stored.rayQueue) ? stored.rayQueue : [];
+  const detectedUsername = normalizeUsername(scan?.selfUsername);
+  const selfUsername = normalizeUsername(stored.raySelfUsername) || (isValidXUsername(detectedUsername) ? detectedUsername : "");
   const pendingByTab = stored.rayPendingByTab || {};
   const currentUrl = normalizeUrl(scan?.current?.url || scan?.url);
 
-  if (!queue.length) return { ok: false, message: "当前原帖还没有和 App 队列关联。请从 App 点击“复制回复并打开原帖”进入 X。" };
   if (!selfUsername) return { ok: false, message: "请先保存你的 X 用户名，例如 Ray_Codeproxy，不是展示名。" };
+  if (!normalizeUsername(stored.raySelfUsername) && selfUsername) {
+    await storageSet({ raySelfUsername: selfUsername });
+  }
 
   let sourceMatch = findQueueItemBySource(queue, currentUrl);
   const recentSource = stored.rayRecentSource || null;
   if (!sourceMatch && recentSource?.sourceUrl && sameStatusUrl(recentSource.sourceUrl, currentUrl)) {
     sourceMatch = findQueueItemByKey(queue, recentSource.itemId) || findQueueItemBySource(queue, recentSource.sourceUrl);
   }
+
+  // Manual recovery is an explicit user action on the source conversation.
+  // If the App click message was missed, rebuild a minimal association from
+  // the current status URL so reply capture can still write back by sourceUrl.
+  if (!sourceMatch && clean(scan?.trigger) === "manual" && statusKeyFromUrl(currentUrl)) {
+    const recoveredItem = {
+      itemId: currentUrl,
+      mode: "growth",
+      sourceUrl: currentUrl,
+      url: currentUrl,
+      status: "new",
+      feedback: "none",
+      usedDraft: "",
+      recoveredAt: new Date().toISOString(),
+    };
+    queue = [recoveredItem, ...queue.filter((item) => !sameStatusUrl(item.sourceUrl || item.url, currentUrl))];
+    sourceMatch = recoveredItem;
+    await storageSet({
+      rayQueue: queue,
+      rayRecentSource: { itemId: recoveredItem.itemId, sourceUrl: currentUrl, savedAt: recoveredItem.recoveredAt },
+    });
+  }
+
+  if (!queue.length) return { ok: false, message: "当前原帖还没有和 App 队列关联。请从 App 点击“复制回复并打开原帖”进入 X。" };
 
   if (sourceMatch && tabId) {
     pendingByTab[String(tabId)] = {
@@ -502,15 +559,43 @@ async function tryAutoApplyUpdatesToApp() {
 
 async function getState() {
   const stored = await storageGet(["rayQueue", "rayUpdates", "rayPendingByTab", "raySelfUsername", "rayReplyScanProgress"]);
+  const storedUsername = normalizeUsername(stored.raySelfUsername);
+  const selfUsername = isValidXUsername(storedUsername) ? storedUsername : await discoverSelfUsernameFromOpenPages();
   return {
     ok: true,
     queueCount: Array.isArray(stored.rayQueue) ? stored.rayQueue.length : 0,
     updateCount: Object.keys(stored.rayUpdates || {}).length,
     pendingCount: Object.keys(stored.rayPendingByTab || {}).length,
-    selfUsername: stored.raySelfUsername || "",
+    selfUsername,
     replyScanProgress: stored.rayReplyScanProgress || null,
   };
 }
+
+async function injectBridgeIntoOpenTabs(urls, file) {
+  const tabs = await queryTabs({ url: urls });
+  await Promise.all(tabs.filter((tab) => tab?.id).map(async (tab) => {
+    try {
+      await executeScript(tab.id, file);
+    } catch {
+      // A tab can disappear or navigate while the extension is installing.
+    }
+  }));
+}
+
+async function injectBridgesIntoExistingPages() {
+  await Promise.all([
+    injectBridgeIntoOpenTabs(APP_URLS, "app-bridge.js"),
+    injectBridgeIntoOpenTabs(["https://x.com/*", "https://twitter.com/*"], "x-bridge.js"),
+  ]);
+}
+
+chrome.runtime.onInstalled?.addListener(() => {
+  void injectBridgesIntoExistingPages();
+});
+
+chrome.runtime.onStartup?.addListener(() => {
+  void injectBridgesIntoExistingPages();
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {

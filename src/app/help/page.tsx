@@ -109,7 +109,7 @@ export default function HelpPage() {
       shortTitle: tr("X 助手插件", "X Helper"),
       summary: tr("连接互动队列和已登录的 X 页面，自动记录回复链接并回写公开反馈。", "Connects the engagement queue to your signed-in X page, records reply links, and syncs public feedback."),
       capabilities: [
-        tr("从 App 点击打开原帖时，自动关联当前队列条目并同步 X 用户名。", "Automatically associates the current queue item and syncs your X username when you open a source post from the App."),
+        tr("从 App 点击打开原帖时立即关联当前队列条目，并从 App 设置或已登录的 X 页面识别用户名。", "Immediately associates the queue item when you open a source post, and identifies your username from App settings or the signed-in X page."),
         tr("识别你本人发布的公开回复并保存 replyUrl。", "Detects your own public reply and stores its replyUrl."),
         tr("巡检已记录回复的公开回复、引用和转发结果。", "Checks recorded replies for public replies, quotes, and reposts."),
         tr("不会自动替你发布内容，也不会读取私信或绕过登录。", "Never posts on your behalf, reads DMs, or bypasses login."),
@@ -119,7 +119,7 @@ export default function HelpPage() {
         tr("在 App 设置里保存 X 主页，或在插件里保存一次 X 用户名。插件弹窗不需要保持打开。", "Save your X profile in App Settings, or save your X username once in the extension. The popup does not need to stay open."),
         tr("在互动队列点击“复制回复并打开原帖”。插件会自动读取并关联这一条，不需要手动读取队列。", "Choose “Copy reply and open source post” in the engagement queue. The extension reads and associates that item automatically; no manual queue sync is needed."),
         tr("由你本人在打开的 X 原帖页面发布回复；回复显示后，插件会自动保存 replyUrl 并回写 App。", "Post the reply yourself on the opened X source post. Once it appears, the extension saves its replyUrl and syncs it to the App automatically."),
-        tr("若没有自动回写，就停留在原帖页点击“找回当前页回复并回写”。", "If automatic sync does not happen, stay on the source post and choose “Find reply on current page and sync.”"),
+        tr("若没有自动回写，就停留在原帖页点击“找回当前页回复并回写”；插件会在需要时重建漏掉的原帖关联。", "If automatic sync does not happen, stay on the source post and choose “Find reply on current page and sync”; the extension rebuilds a missed source association when needed."),
         tr("过一段时间后点击“巡检已记录的回复链接”检查公开反馈；“手动回写暂存反馈”只用于 App 当时没有成功接收的情况。", "Later, choose “Check recorded reply links” to inspect public feedback. “Manually sync stored feedback” is only for cases where the App did not receive an update."),
       ],
       icon: <Puzzle className="h-5 w-5" />,

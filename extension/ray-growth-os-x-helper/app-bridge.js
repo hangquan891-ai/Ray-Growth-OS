@@ -80,6 +80,21 @@
     }
   }
 
+  function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        const error = chrome.runtime.lastError;
+        if (error) reject(new Error(error.message));
+        else resolve(response);
+      });
+    });
+  }
+
+  function locallyConfiguredUsername() {
+    const xProfile = readJson(X_PROFILE_CONFIG_STORAGE_KEY, {});
+    return usernameFromProfileUrl(xProfile.profileUrl || xProfile.url || "");
+  }
+
   async function readLocalStateRecord(scope) {
     const response = await fetch(`${window.location.origin}/api/local-state/${scope}`, { cache: "no-store" });
     const body = await response.json().catch(() => null);
@@ -229,19 +244,44 @@
   async function notifySourceOpen(url, hints = {}) {
     const normalizedUrl = normalizeUrl(url);
     if (!isXStatusUrl(normalizedUrl)) return;
-    const { queue, selfUsername } = await readQueue();
-    const item = queue.find((candidate) => sameStatusUrl(candidate.sourceUrl || candidate.url, normalizedUrl));
-    if (!item) return;
-    const usedDraft = clean(hints.usedDraft) || clean(item.usedDraft);
+    // Track immediately. Do not wait for the React autosave or the local SQLite
+    // request: on a fresh machine either can still be cold when the link opens.
+    const minimalItem = {
+      itemId: normalizedUrl,
+      mode: "growth",
+      sourceUrl: normalizedUrl,
+      url: normalizedUrl,
+      usedDraft: clean(hints.usedDraft),
+    };
+    const localUsername = locallyConfiguredUsername();
     try {
-      chrome.runtime.sendMessage({
+      await sendRuntimeMessage({
         type: "RAY_APP_SOURCE_OPENED",
-        item: { ...item, usedDraft, sourceUrl: item.sourceUrl || item.url, url: item.url || item.sourceUrl },
+        item: minimalItem,
         url: normalizedUrl,
-        selfUsername,
+        selfUsername: localUsername,
       });
     } catch {
       // Extension was reloaded while the app page stayed open.
+      return;
+    }
+
+    // Enrich the tracked record after the immediate write. Failure here must
+    // never undo the source association that was already saved above.
+    try {
+      const { queue, selfUsername } = await readQueue();
+      const item = queue.find((candidate) => sameStatusUrl(candidate.sourceUrl || candidate.url, normalizedUrl));
+      if (!item && !selfUsername) return;
+      await sendRuntimeMessage({
+        type: "RAY_APP_SOURCE_OPENED",
+        item: item
+          ? { ...item, usedDraft: clean(hints.usedDraft) || clean(item.usedDraft), sourceUrl: item.sourceUrl || item.url, url: item.url || item.sourceUrl }
+          : minimalItem,
+        url: normalizedUrl,
+        selfUsername: selfUsername || localUsername,
+      });
+    } catch {
+      // The minimal source association remains usable for manual recovery.
     }
   }
 
@@ -257,6 +297,19 @@
   );
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === "RAY_READ_SELF_USERNAME") {
+      (async () => {
+        const localUsername = locallyConfiguredUsername();
+        if (localUsername) return { ok: true, selfUsername: localUsername };
+        try {
+          const { selfUsername } = await readQueue();
+          return { ok: Boolean(selfUsername), selfUsername: selfUsername || "" };
+        } catch {
+          return { ok: false, selfUsername: "" };
+        }
+      })().then(sendResponse);
+      return true;
+    }
     if (message?.type === "RAY_APPLY_FEEDBACK_UPDATES") {
       applyUpdates(message.updates)
         .then(sendResponse)

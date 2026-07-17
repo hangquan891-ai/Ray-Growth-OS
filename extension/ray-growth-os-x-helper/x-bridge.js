@@ -46,6 +46,35 @@
     }
   }
 
+  function usernameFromProfileHref(value) {
+    try {
+      const url = new URL(value, location.origin);
+      const host = url.hostname.toLowerCase().replace(/^www\./, "");
+      if (host !== "x.com" && host !== "twitter.com") return "";
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts.length !== 1) return "";
+      const username = normalizeUsername(parts[0]);
+      if (["home", "explore", "search", "i", "settings", "notifications", "messages", "compose"].includes(username)) return "";
+      return /^[a-z0-9_]{1,15}$/.test(username) ? username : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function detectSelfUsername() {
+    const selectors = [
+      'a[data-testid="AppTabBar_Profile_Link"][href]',
+      'a[aria-label="Profile"][href]',
+      'a[aria-label="个人资料"][href]',
+      'a[aria-label="個人資料"][href]',
+    ];
+    for (const selector of selectors) {
+      const username = usernameFromProfileHref(document.querySelector(selector)?.getAttribute("href") || "");
+      if (username) return username;
+    }
+    return "";
+  }
+
   function parseNumber(value) {
     const text = clean(value).replace(/,/g, "");
     const match = text.match(/([0-9]+(?:\.[0-9]+)?)\s*([kKmM]|\u4e07)?/);
@@ -113,7 +142,7 @@
     const current = currentStatus
       ? articles.find((article) => article.statusId === currentStatus.statusId) || { ...currentStatus, url: normalizeUrl(currentStatus.url), text: "", metrics: {} }
       : null;
-    return { ok: true, trigger, url: normalizeUrl(location.href), current, articles };
+    return { ok: true, trigger, url: normalizeUrl(location.href), current, articles, selfUsername: detectSelfUsername() };
   }
 
   function sendAutoScan(trigger = "auto") {
@@ -157,6 +186,11 @@
   );
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === "RAY_READ_SELF_USERNAME") {
+      const selfUsername = detectSelfUsername();
+      sendResponse({ ok: Boolean(selfUsername), selfUsername });
+      return true;
+    }
     if (message?.type === "RAY_SCAN_X_NOW") {
       sendResponse(scanPage("manual"));
       return true;
