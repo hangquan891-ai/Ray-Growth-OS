@@ -13,7 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   DEFAULT_AI_RESPONSE_MODEL,
+  DEFAULT_AI_RESPONSE_ENDPOINT,
   DEFAULT_GROK_PROXY_MODEL,
+  DEFAULT_GROK_PROXY_ENDPOINT,
   normalizeAiResponseConfig,
   normalizeGrokProxyConfig,
   normalizeXProfileConfig,
@@ -21,12 +23,10 @@ import {
 import { loadSharedSettings, readLocalState, saveSharedSettings, type SharedSettings, writeLocalState } from "@/lib/local-state-client";
 import { DEFAULT_WORKBENCH_STATE } from "@/lib/workbench-state";
 
-const CODEPROXY_MESSAGES_URL = "https://codeproxy.dev/v1/messages";
-const CODEPROXY_RESPONSES_URL = "https://codeproxy.dev/v1/responses";
-
 type ProxyConfig = {
   apiKey: string;
   model: string;
+  endpoint: string;
 };
 
 type XProfileConfig = {
@@ -50,8 +50,10 @@ export default function SettingsPage() {
   const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
   const [grokApiKey, setGrokApiKey] = useState("");
   const [grokModel, setGrokModel] = useState(DEFAULT_GROK_PROXY_MODEL);
+  const [grokEndpoint, setGrokEndpoint] = useState(DEFAULT_GROK_PROXY_ENDPOINT);
   const [aiApiKey, setAiApiKey] = useState("");
   const [aiModel, setAiModel] = useState(DEFAULT_AI_RESPONSE_MODEL);
+  const [aiEndpoint, setAiEndpoint] = useState(DEFAULT_AI_RESPONSE_ENDPOINT);
   const [xProfileUrl, setXProfileUrl] = useState("");
   const [message, setMessage] = useState("");
 
@@ -62,8 +64,10 @@ export default function SettingsPage() {
         if (cancelled) return;
         setGrokApiKey(settings.grok.apiKey);
         setGrokModel(settings.grok.model || DEFAULT_GROK_PROXY_MODEL);
+        setGrokEndpoint(settings.grok.endpoint || DEFAULT_GROK_PROXY_ENDPOINT);
         setAiApiKey(settings.ai.apiKey);
         setAiModel(settings.ai.model || DEFAULT_AI_RESPONSE_MODEL);
+        setAiEndpoint(settings.ai.endpoint || DEFAULT_AI_RESPONSE_ENDPOINT);
         setXProfileUrl(settings.xProfile.profileUrl);
       })
       .catch(() => {
@@ -86,31 +90,33 @@ export default function SettingsPage() {
   function settingsPayload(overrides: Partial<Pick<SharedSettings, "grok" | "ai" | "xProfile">> = {}): SharedSettings {
     return {
       version: 1,
-      grok: overrides.grok ?? (normalizeGrokProxyConfig({ apiKey: grokApiKey, model: grokModel }) as ProxyConfig),
-      ai: overrides.ai ?? (normalizeAiResponseConfig({ apiKey: aiApiKey, model: aiModel }) as ProxyConfig),
+      grok: overrides.grok ?? (normalizeGrokProxyConfig({ apiKey: grokApiKey, model: grokModel, endpoint: grokEndpoint }) as ProxyConfig),
+      ai: overrides.ai ?? (normalizeAiResponseConfig({ apiKey: aiApiKey, model: aiModel, endpoint: aiEndpoint }) as ProxyConfig),
       xProfile: overrides.xProfile ?? (normalizeXProfileConfig({ profileUrl: xProfileUrl }) as XProfileConfig),
     };
   }
 
   async function saveGrokConfig() {
-    const config = normalizeGrokProxyConfig({ apiKey: grokApiKey, model: grokModel }) as ProxyConfig;
+    const config = normalizeGrokProxyConfig({ apiKey: grokApiKey, model: grokModel, endpoint: grokEndpoint }) as ProxyConfig;
     try {
       await saveSharedSettings(settingsPayload({ grok: config }));
       setGrokApiKey(config.apiKey);
       setGrokModel(config.model);
-      notify(config.apiKey ? tr("已保存 Grok 配置。现在可以回到工作台使用竞品洞察和中转查询。", "Grok settings saved. You can now use competitor insights and proxy search.") : tr("已保存 Grok 默认模型，但还没有填写密钥。", "The default Grok model was saved, but no API key is configured yet."), config.apiKey ? "success" : "info");
+      setGrokEndpoint(config.endpoint);
+      notify(config.apiKey ? tr("已保存 Grok 配置。竞品洞察和自动查询会使用当前请求地址。", "Grok settings saved. Competitor insights and automatic queries will use the configured request URL.") : tr("已保存 Grok 模型和请求地址，但还没有填写密钥。", "The Grok model and request URL were saved, but no API key is configured yet."), config.apiKey ? "success" : "info");
     } catch {
       notify(tr("保存失败：无法写入本机共享数据库，请确认本地服务仍在运行。", "Save failed because the shared local database is unavailable. Make sure the local service is running."), "error");
     }
   }
 
   async function saveAiConfig() {
-    const config = normalizeAiResponseConfig({ apiKey: aiApiKey, model: aiModel }) as ProxyConfig;
+    const config = normalizeAiResponseConfig({ apiKey: aiApiKey, model: aiModel, endpoint: aiEndpoint }) as ProxyConfig;
     try {
       await saveSharedSettings(settingsPayload({ ai: config }));
       setAiApiKey(config.apiKey);
       setAiModel(config.model);
-      notify(config.apiKey ? tr("已保存 GPT-5.5 配置。评分和草稿生成会走 codeproxy.dev/v1/responses。", "AI settings saved. Scoring and drafts will use codeproxy.dev/v1/responses.") : tr("已保存 GPT-5.5 默认模型，但还没有填写密钥。", "The default AI model was saved, but no API key is configured yet."), config.apiKey ? "success" : "info");
+      setAiEndpoint(config.endpoint);
+      notify(config.apiKey ? tr("已保存 AI 配置。评分、草稿、定位和增长记忆会使用当前请求地址。", "AI settings saved. Scoring, drafts, positioning, and growth memory will use the configured request URL.") : tr("已保存 AI 模型和请求地址，但还没有填写密钥。", "The AI model and request URL were saved, but no API key is configured yet."), config.apiKey ? "success" : "info");
     } catch {
       notify(tr("保存失败：无法写入本机共享数据库，请确认本地服务仍在运行。", "Save failed because the shared local database is unavailable. Make sure the local service is running."), "error");
     }
@@ -143,6 +149,7 @@ export default function SettingsPage() {
       await saveSharedSettings(settingsPayload({ grok: config }));
       setGrokApiKey("");
       setGrokModel(DEFAULT_GROK_PROXY_MODEL);
+      setGrokEndpoint(DEFAULT_GROK_PROXY_ENDPOINT);
       notify(tr("已清空 Grok 找人配置。", "Grok discovery settings cleared."), "info");
     } catch {
       notify(tr("清空失败：无法写入本机共享数据库。", "Clear failed because the shared local database is unavailable."), "error");
@@ -155,6 +162,7 @@ export default function SettingsPage() {
       await saveSharedSettings(settingsPayload({ ai: config }));
       setAiApiKey("");
       setAiModel(DEFAULT_AI_RESPONSE_MODEL);
+      setAiEndpoint(DEFAULT_AI_RESPONSE_ENDPOINT);
       notify(tr("已清空 GPT-5.5 评分/草稿配置。", "AI scoring and draft settings cleared."), "info");
     } catch {
       notify(tr("清空失败：无法写入本机共享数据库。", "Clear failed because the shared local database is unavailable."), "error");
@@ -190,7 +198,7 @@ export default function SettingsPage() {
               <KeyRound className="mr-1 h-3.5 w-3.5" /> {t("keySettings")}
             </Badge>
             <h1 className="mt-4 text-3xl font-black text-white sm:text-5xl">{t("apiSettings")}</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">{tr("Grok 用来找讨论和做竞品洞察，GPT-5.5 用来评分和生成草稿。两者都通过 codeproxy.dev 中转，请分别保存密钥和模型。", "Grok discovers public discussions and competitor opportunities. The AI model scores signals and generates drafts. Save each key and model separately.")}</p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">{tr("Grok 用来找讨论和做竞品洞察，AI 用来评分、生成草稿和增长记忆。可分别配置密钥、模型和兼容接口的完整请求地址；默认使用当前 codeproxy.dev 地址。", "Grok discovers public discussions and competitor opportunities. AI handles scoring, drafts, and growth memory. Configure each key, model, and compatible request URL; the current codeproxy.dev URLs remain the defaults.")}</p>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
           <LanguageToggle />
@@ -203,8 +211,8 @@ export default function SettingsPage() {
         </div>
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <Card className="fade-up delay-1 overflow-hidden border border-white/[0.08] bg-white/[0.03] text-white shadow-2xl shadow-blue-500/5 backdrop-blur-md">
-            <CardHeader className="border-b border-white/[0.08] bg-[#0d0d10]/70">
+          <Card className="fade-up delay-1 flex h-full flex-col overflow-hidden border border-white/[0.08] bg-white/[0.03] text-white shadow-2xl shadow-blue-500/5 backdrop-blur-md">
+            <CardHeader className="border-b border-white/[0.08] bg-[#0d0d10]/70 lg:min-h-[116px]">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-xl text-white">
@@ -215,7 +223,7 @@ export default function SettingsPage() {
                 <Badge variant="outline" className={statusClass(grokHasKey)}>{grokHasKey ? t("configured") : t("notConfigured")}</Badge>
               </div>
             </CardHeader>
-            <CardContent className="grid gap-5 p-5 sm:p-6">
+            <CardContent className="flex flex-1 flex-col gap-5 p-5 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_190px]">
                 <div className="grid gap-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-white/45">Grok / codeproxy {tr("密钥", "API key")}</Label>
@@ -226,10 +234,15 @@ export default function SettingsPage() {
                   <Input value={grokModel} onChange={(event) => setGrokModel(event.target.value)} placeholder={DEFAULT_GROK_PROXY_MODEL} className="border-white/[0.08] bg-[#0d0d10]/80 text-white placeholder:text-white/35" />
                 </div>
               </div>
+              <div className="grid gap-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-white/45">{tr("Grok 请求地址", "Grok request URL")}</Label>
+                <Input type="url" value={grokEndpoint} onChange={(event) => setGrokEndpoint(event.target.value)} placeholder={DEFAULT_GROK_PROXY_ENDPOINT} className="border-white/[0.08] bg-[#0d0d10]/80 font-mono text-xs text-white placeholder:text-white/35" autoComplete="off" spellCheck={false} />
+                <p className="text-xs leading-5 text-white/40 lg:min-h-10">{tr("填写兼容 Anthropic Messages 格式的完整地址。留空或填写无效地址时使用默认值。", "Enter the full URL for an Anthropic Messages-compatible endpoint. Empty or invalid values fall back to the default.")}</p>
+              </div>
               <div className="grid gap-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-4 text-sm text-white/65 sm:grid-cols-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("接口", "Endpoint")}</p>
-                  <p className="mt-2 break-all font-mono text-xs text-blue-200/80">{CODEPROXY_MESSAGES_URL}</p>
+                  <p className="mt-2 break-all font-mono text-xs text-blue-200/80">{grokEndpoint.trim() || DEFAULT_GROK_PROXY_ENDPOINT}</p>
                 </div>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("模型", "Model")}</p>
@@ -240,7 +253,7 @@ export default function SettingsPage() {
                   <p className="mt-2 font-mono text-xs text-white/75">{maskSecret(grokApiKey, locale)}</p>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <div className="mt-auto flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button variant="outline" className="tech-secondary" onClick={clearGrokConfig}>
                   <Trash2 className="h-4 w-4" /> {t("clear")}
                 </Button>
@@ -251,8 +264,8 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="fade-up delay-2 overflow-hidden border border-white/[0.08] bg-white/[0.03] text-white shadow-2xl shadow-blue-500/5 backdrop-blur-md">
-            <CardHeader className="border-b border-white/[0.08] bg-[#0d0d10]/70">
+          <Card className="fade-up delay-2 flex h-full flex-col overflow-hidden border border-white/[0.08] bg-white/[0.03] text-white shadow-2xl shadow-blue-500/5 backdrop-blur-md">
+            <CardHeader className="border-b border-white/[0.08] bg-[#0d0d10]/70 lg:min-h-[116px]">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-xl text-white">
@@ -263,7 +276,7 @@ export default function SettingsPage() {
                 <Badge variant="outline" className={statusClass(aiHasKey)}>{aiHasKey ? t("configured") : t("notConfigured")}</Badge>
               </div>
             </CardHeader>
-            <CardContent className="grid gap-5 p-5 sm:p-6">
+            <CardContent className="flex flex-1 flex-col gap-5 p-5 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_190px]">
                 <div className="grid gap-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-white/45">GPT-5.5 / codeproxy {tr("密钥", "API key")}</Label>
@@ -274,10 +287,15 @@ export default function SettingsPage() {
                   <Input value={aiModel} onChange={(event) => setAiModel(event.target.value)} placeholder={DEFAULT_AI_RESPONSE_MODEL} className="border-white/[0.08] bg-[#0d0d10]/80 text-white placeholder:text-white/35" />
                 </div>
               </div>
+              <div className="grid gap-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-white/45">{tr("AI 请求地址", "AI request URL")}</Label>
+                <Input type="url" value={aiEndpoint} onChange={(event) => setAiEndpoint(event.target.value)} placeholder={DEFAULT_AI_RESPONSE_ENDPOINT} className="border-white/[0.08] bg-[#0d0d10]/80 font-mono text-xs text-white placeholder:text-white/35" autoComplete="off" spellCheck={false} />
+                <p className="text-xs leading-5 text-white/40 lg:min-h-10">{tr("填写兼容 OpenAI Responses 格式的完整地址。评分、草稿、定位和增长记忆共用此地址。", "Enter the full URL for an OpenAI Responses-compatible endpoint. Scoring, drafts, positioning, and growth memory share it.")}</p>
+              </div>
               <div className="grid gap-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-4 text-sm text-white/65 sm:grid-cols-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("接口", "Endpoint")}</p>
-                  <p className="mt-2 break-all font-mono text-xs text-blue-200/80">{CODEPROXY_RESPONSES_URL}</p>
+                  <p className="mt-2 break-all font-mono text-xs text-blue-200/80">{aiEndpoint.trim() || DEFAULT_AI_RESPONSE_ENDPOINT}</p>
                 </div>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-white/35">{tr("模型", "Model")}</p>
@@ -288,7 +306,7 @@ export default function SettingsPage() {
                   <p className="mt-2 font-mono text-xs text-white/75">{maskSecret(aiApiKey, locale)}</p>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <div className="mt-auto flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button variant="outline" className="tech-secondary" onClick={clearAiConfig}>
                   <Trash2 className="h-4 w-4" /> {t("clear")}
                 </Button>

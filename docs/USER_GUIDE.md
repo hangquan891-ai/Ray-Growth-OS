@@ -28,7 +28,7 @@ The main navigation is:
 | Find people | Define positioning, generate a search prompt, and import discussions | At the start of every discovery round. |
 | Engagement queue | Prioritize, review drafts, open source posts, and record outcomes | During day-to-day execution. |
 | Competitor insights | Find discussions around a competitor, KOL, or community account | When you need a different discovery angle. Optional. |
-| Settings | Configure Grok, AI models, and a public X profile | When you want optional automated features. |
+| Settings | Configure Grok and AI keys, models, request URLs, and a public X profile | When you want optional automated features. |
 
 ### 2. Define your positioning
 
@@ -71,7 +71,7 @@ You do not need to provide browser cookies or X credentials to the workbench.
 
 #### Path B: automatic query (after configuration)
 
-1. Open **Settings** and save a Grok/codeproxy key and model.
+1. Open **Settings** and save a Grok/codeproxy key, model, and Messages-compatible request URL. The default is `https://codeproxy.dev/v1/messages`.
 2. Return to **Find people** and click **Run automatic query**.
 3. The workbench sends the current prompt through the proxy and parses reviewable structured signals.
 4. Review the results before importing them.
@@ -131,7 +131,7 @@ When new outcomes arrive, choose **Grow into the next round**. The app learns on
 
 ### AI scoring and drafts
 
-After saving an AI Responses-compatible key and model in **Settings**, you can use:
+After saving an AI Responses-compatible key, model, and request URL in **Settings**, you can use the features below. The default request URL is `https://codeproxy.dev/v1/responses`.
 
 - AI positioning suggestions;
 - AI semantic scoring;

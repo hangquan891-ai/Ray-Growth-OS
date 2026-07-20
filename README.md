@@ -72,11 +72,11 @@ The workbench starts empty. Add your own product or account positioning before s
 
 Open **Settings** in the app to configure:
 
-- a Grok/codeproxy key and model for automatic public-discussion discovery and competitor insights;
-- an AI Responses-compatible key and model for positioning suggestions, semantic scoring, drafts, and learning;
+- a Grok/codeproxy key, model, and Messages-compatible request URL for automatic public-discussion discovery and competitor insights;
+- an AI Responses-compatible key, model, and request URL for positioning suggestions, semantic scoring, drafts, and learning;
 - an optional public X profile URL used to create an editable positioning draft.
 
-Settings and new workbench data are stored in a local SQLite database, so browsers on the same computer and port share one copy. On the first upgrade, the app migrates only the existing Grok, AI, and X profile settings from the current browser. It deliberately does not migrate legacy positioning, queues, scores, drafts, feedback, or growth memory, giving existing users a clean workbench for retesting.
+Settings and new workbench data are stored in a local SQLite database, so browsers on the same computer and port share one copy. The Grok request URL defaults to `https://codeproxy.dev/v1/messages`, and the AI request URL defaults to `https://codeproxy.dev/v1/responses`; both can be replaced with compatible endpoints in Settings. On the first upgrade, the app migrates only the existing Grok, AI, and X profile settings from the current browser. It deliberately does not migrate legacy positioning, queues, scores, drafts, feedback, or growth memory, giving existing users a clean workbench for retesting.
 
 Workbench writes use revision checks instead of last-write-wins replacement. Concurrent tabs and extension updates are merged before retrying, unchanged page loads do not rewrite the database, and SQLite keeps the previous 100 workbench revisions as local recovery history.
 

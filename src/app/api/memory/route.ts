@@ -8,12 +8,12 @@ import {
   normalizeGrowthMemoryResponse,
 } from "@/lib/growth-memory";
 import { recordAiDiagnostic } from "@/lib/local-db";
+import { DEFAULT_AI_RESPONSE_ENDPOINT, normalizeApiEndpoint } from "@/lib/codeproxy-grok";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const GROWTH_MEMORY_TIMEOUT_MS = 45000;
-const GROWTH_MEMORY_ENDPOINT = "https://codeproxy.dev/v1/responses";
 
 type MemoryMode = "outbound" | "growth";
 
@@ -26,6 +26,7 @@ type MemoryRequest = {
   samples?: unknown[];
   apiKey?: string;
   model?: string;
+  endpoint?: string;
 };
 
 function clean(value: unknown) {
@@ -254,6 +255,7 @@ export async function POST(request: Request) {
   }
 
   const model = clean(body.model) || process.env.CODEPROXY_MEMORY_MODEL?.trim() || process.env.CODEPROXY_AI_MODEL?.trim() || "gpt-5.5";
+  const endpoint = normalizeApiEndpoint(body.endpoint ?? process.env.CODEPROXY_AI_ENDPOINT, DEFAULT_AI_RESPONSE_ENDPOINT);
   const locale: "zh-CN" | "en" = body.locale === "en" ? "en" : "zh-CN";
   const payload = {
     mode,
@@ -274,7 +276,7 @@ export async function POST(request: Request) {
   let responseBody = "";
 
   try {
-    response = await fetch(GROWTH_MEMORY_ENDPOINT, {
+    response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -304,7 +306,7 @@ export async function POST(request: Request) {
       responseBody,
       responseShape: {
         request: {
-          url: GROWTH_MEMORY_ENDPOINT,
+          url: endpoint,
           method: "POST",
           headers: { authorization: "[REDACTED]", "content-type": "application/json" },
           timeoutMs: GROWTH_MEMORY_TIMEOUT_MS,
@@ -333,7 +335,7 @@ export async function POST(request: Request) {
 
   const responseShape = {
     request: {
-      url: GROWTH_MEMORY_ENDPOINT,
+      url: endpoint,
       method: "POST",
       headers: { authorization: "[REDACTED]", "content-type": "application/json" },
       timeoutMs: GROWTH_MEMORY_TIMEOUT_MS,

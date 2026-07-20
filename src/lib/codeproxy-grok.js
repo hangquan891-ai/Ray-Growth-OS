@@ -6,6 +6,8 @@
   root.CodeProxyGrok = api;
 })(typeof globalThis !== "undefined" ? globalThis : window, function createCodeProxyGrokApi() {
   const CODEPROXY_BASE_URL = "https://codeproxy.dev";
+  const DEFAULT_GROK_PROXY_ENDPOINT = `${CODEPROXY_BASE_URL}/v1/messages`;
+  const DEFAULT_AI_RESPONSE_ENDPOINT = `${CODEPROXY_BASE_URL}/v1/responses`;
   const DEFAULT_GROK_PROXY_MODEL = "grok-4.3-fast";
   const DEFAULT_AI_RESPONSE_MODEL = "gpt-5.5";
   const GROK_PROXY_CONFIG_STORAGE_KEY = "ray-growth-os:grok-proxy-config:v1";
@@ -33,6 +35,20 @@
     return Math.max(0, Math.min(1, number));
   }
 
+  function normalizeApiEndpoint(value, fallback) {
+    const defaultEndpoint = clean(fallback);
+    const candidate = clean(value) || defaultEndpoint;
+    try {
+      const url = new URL(candidate);
+      if (url.protocol !== "https:" && url.protocol !== "http:") return defaultEndpoint;
+      if (url.username || url.password) return defaultEndpoint;
+      url.hash = "";
+      return url.toString().replace(/\/$/, "");
+    } catch {
+      return defaultEndpoint;
+    }
+  }
+
   function normalizeGrokProxyConfig(input) {
     const source = input && typeof input === "object" ? input : {};
     const apiKey = clean(source.apiKey);
@@ -41,6 +57,7 @@
     return {
       apiKey,
       model: model && model !== "grok-4" ? model : DEFAULT_GROK_PROXY_MODEL,
+      endpoint: normalizeApiEndpoint(source.endpoint ?? source.url, DEFAULT_GROK_PROXY_ENDPOINT),
     };
   }
 
@@ -52,6 +69,7 @@
     return {
       apiKey,
       model: model || DEFAULT_AI_RESPONSE_MODEL,
+      endpoint: normalizeApiEndpoint(source.endpoint ?? source.url, DEFAULT_AI_RESPONSE_ENDPOINT),
     };
   }
   function normalizeXProfileConfig(input) {
@@ -60,9 +78,9 @@
       profileUrl: normalizeXProfileUrl(source.profileUrl ?? source.url ?? ""),
     };
   }
-  function buildCodeProxyMessageRequest({ prompt, model, maxTokens = 1800, temperature = 0.2 }) {
+  function buildCodeProxyMessageRequest({ prompt, model, endpoint, maxTokens = 1800, temperature = 0.2 }) {
     return {
-      url: `${CODEPROXY_BASE_URL}/v1/messages`,
+      url: normalizeApiEndpoint(endpoint, DEFAULT_GROK_PROXY_ENDPOINT),
       headers: {
         "Content-Type": "application/json",
         "anthropic-version": ANTHROPIC_VERSION,
@@ -221,6 +239,8 @@ ${pulledData ? `\n竞品洞察已读取到的公开 X 数据：\n${pulledData}\n
   return {
     ANTHROPIC_VERSION,
     CODEPROXY_BASE_URL,
+    DEFAULT_GROK_PROXY_ENDPOINT,
+    DEFAULT_AI_RESPONSE_ENDPOINT,
     DEFAULT_GROK_PROXY_MODEL,
     DEFAULT_AI_RESPONSE_MODEL,
     GROK_PROXY_CONFIG_STORAGE_KEY,
@@ -233,6 +253,7 @@ ${pulledData ? `\n竞品洞察已读取到的公开 X 数据：\n${pulledData}\n
     normalizeXProfileUrl,
     normalizeGrokProxyConfig,
     normalizeAiResponseConfig,
+    normalizeApiEndpoint,
     normalizeXProfileConfig,
     extractCodeProxyMessageText,
   };

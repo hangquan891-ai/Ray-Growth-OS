@@ -6,6 +6,7 @@ import {
   extractResponseOutputText,
   normalizeAiScoreResponse,
 } from "@/lib/llm-scoring";
+import { DEFAULT_AI_RESPONSE_ENDPOINT, normalizeApiEndpoint } from "@/lib/codeproxy-grok";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ type ScoreRequest = {
   items?: unknown[];
   apiKey?: string;
   model?: string;
+  endpoint?: string;
 };
 
 function normalizeMode(value: unknown): ScoreMode {
@@ -76,6 +78,7 @@ export async function POST(request: Request) {
   }
 
   const model = String(body.model ?? "").trim() || process.env.CODEPROXY_SCORE_MODEL?.trim() || process.env.CODEPROXY_AI_MODEL?.trim() || "gpt-5.5";
+  const endpoint = normalizeApiEndpoint(body.endpoint ?? process.env.CODEPROXY_AI_ENDPOINT, DEFAULT_AI_RESPONSE_ENDPOINT);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), AI_SCORE_TIMEOUT_MS);
 
@@ -83,7 +86,7 @@ export async function POST(request: Request) {
   let responseJson: unknown;
 
   try {
-    response = await fetch("https://codeproxy.dev/v1/responses", {
+    response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

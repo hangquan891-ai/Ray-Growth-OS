@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { AI_DRAFT_LIMIT, buildOpenAiDraftRequestBody, normalizeAiDraftResponse } from "@/lib/llm-drafts";
 import { extractResponseOutputText } from "@/lib/llm-scoring";
 import { recordAiDiagnostic } from "@/lib/local-db";
+import { DEFAULT_AI_RESPONSE_ENDPOINT, normalizeApiEndpoint } from "@/lib/codeproxy-grok";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ type DraftRequest = {
   items?: unknown[];
   apiKey?: string;
   model?: string;
+  endpoint?: string;
 };
 
 function normalizeMode(value: unknown): DraftMode {
@@ -83,6 +85,7 @@ export async function POST(request: Request) {
   }
 
   const model = String(body.model ?? "").trim() || process.env.CODEPROXY_DRAFT_MODEL?.trim() || process.env.CODEPROXY_AI_MODEL?.trim() || "gpt-5.5";
+  const endpoint = normalizeApiEndpoint(body.endpoint ?? process.env.CODEPROXY_AI_ENDPOINT, DEFAULT_AI_RESPONSE_ENDPOINT);
   const upstreamRequest = buildOpenAiDraftRequestBody({
     model,
     payload: {
@@ -105,7 +108,7 @@ export async function POST(request: Request) {
   let responseBody = "";
 
   try {
-    response = await fetch("https://codeproxy.dev/v1/responses", {
+    response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -132,7 +135,7 @@ export async function POST(request: Request) {
       responseBody,
       responseShape: {
         request: {
-          url: "https://codeproxy.dev/v1/responses",
+          url: endpoint,
           method: "POST",
           headers: { authorization: "[REDACTED]", "content-type": "application/json" },
           timeoutMs: AI_DRAFT_TIMEOUT_MS,
@@ -157,7 +160,7 @@ export async function POST(request: Request) {
 
   const responseShape = {
     request: {
-      url: "https://codeproxy.dev/v1/responses",
+      url: endpoint,
       method: "POST",
       headers: { authorization: "[REDACTED]", "content-type": "application/json" },
       timeoutMs: AI_DRAFT_TIMEOUT_MS,

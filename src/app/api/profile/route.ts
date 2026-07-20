@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { normalizeXProfileUrl } from "@/lib/codeproxy-grok";
+import { DEFAULT_AI_RESPONSE_ENDPOINT, normalizeApiEndpoint, normalizeXProfileUrl } from "@/lib/codeproxy-grok";
 import { recordAiDiagnostic } from "@/lib/local-db";
 import { buildOpenAiProfileRequestBody, normalizeGeneratedProfile } from "@/lib/llm-profile";
 import { extractResponseOutputText } from "@/lib/llm-scoring";
@@ -20,6 +20,7 @@ type ProfileRequest = {
   current?: unknown;
   apiKey?: string;
   model?: string;
+  endpoint?: string;
 };
 
 function normalizeMode(value: unknown): ProfileMode {
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
   }
 
   const model = String(body.model ?? "").trim() || process.env.CODEPROXY_PROFILE_MODEL?.trim() || process.env.CODEPROXY_AI_MODEL?.trim() || "gpt-5.5";
+  const endpoint = normalizeApiEndpoint(body.endpoint ?? process.env.CODEPROXY_AI_ENDPOINT, DEFAULT_AI_RESPONSE_ENDPOINT);
   const startedAt = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROFILE_TIMEOUT_MS);
@@ -147,7 +149,7 @@ export async function POST(request: Request) {
   let responseBodyFormat: "json" | "non_json" | "empty" = "empty";
 
   try {
-    response = await fetch("https://codeproxy.dev/v1/responses", {
+    response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -207,6 +209,7 @@ export async function POST(request: Request) {
 
   const responseShape = {
     requestPolicy: {
+      endpoint,
       timeoutMs: PROFILE_TIMEOUT_MS,
       maxOutputTokens: 2400,
       reasoningEffort: /^gpt-5\.5(?:$|-)/i.test(model) ? "none" : "provider-default",

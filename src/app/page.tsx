@@ -79,11 +79,13 @@ type GrokBridgeState = {
 type GrokProxyConfig = {
   apiKey: string;
   model: string;
+  endpoint: string;
 };
 
 type AiResponseConfig = {
   apiKey: string;
   model: string;
+  endpoint: string;
 };
 
 type XProfileConfig = {
@@ -1593,6 +1595,7 @@ export default function Home() {
       },
       apiKey: aiConfig.apiKey,
       model: aiConfig.model,
+      endpoint: aiConfig.endpoint,
     });
 
     let data: ProfileApiResponse = {};
@@ -1911,7 +1914,7 @@ export default function Home() {
         const response = await fetch("/api/score", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, apiKey: aiConfig.apiKey, model: aiConfig.model }),
+          body: JSON.stringify({ ...payload, apiKey: aiConfig.apiKey, model: aiConfig.model, endpoint: aiConfig.endpoint }),
         });
         const data = (await response.json().catch(() => ({ message: "AI 评分请求失败。" }))) as ScoreApiResponse;
 
@@ -1991,7 +1994,7 @@ export default function Home() {
             const response = await fetch("/api/drafts", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...payload, items: [item], apiKey: aiConfig.apiKey, model: aiConfig.model }),
+              body: JSON.stringify({ ...payload, items: [item], apiKey: aiConfig.apiKey, model: aiConfig.model, endpoint: aiConfig.endpoint }),
             });
             const data = (await response.json().catch(() => ({ message: "AI 草稿生成请求失败。" }))) as DraftApiResponse;
 
@@ -2138,7 +2141,7 @@ export default function Home() {
       throw new Error("请先到设置页面配置 GPT-5.5 / codeproxy 密钥，再生成增长记忆。");
     }
 
-    const requestBody = JSON.stringify({ ...payload, apiKey: aiConfig.apiKey, model: aiConfig.model });
+    const requestBody = JSON.stringify({ ...payload, apiKey: aiConfig.apiKey, model: aiConfig.model, endpoint: aiConfig.endpoint });
     let data: GrowthMemoryApiResponse = {};
     let lastMessage = locale === "en" ? "Growth-memory generation failed." : "增长记忆生成失败。";
     let lastDiagnosticId: number | undefined;
@@ -4785,6 +4788,7 @@ function GrokBridgePanel({
           action: "profile-pull",
           apiKey,
           model: latestConfig.model,
+          endpoint: latestConfig.endpoint,
           locale,
           prompt,
           profileUrl,
@@ -4860,7 +4864,7 @@ function GrokBridgePanel({
     setProxySearchResult(null);
     setResultPreviewPage(1);
     setBridgeDiagnosticId(null);
-    setBridgeMessage("Grok 查询中，请稍等。正在通过 codeproxy.dev 获取候选信号。");
+    setBridgeMessage("Grok 查询中，请稍等。正在通过已配置的 Grok 接口获取候选信号。");
 
     try {
       const response = await fetch("/api/grok", {
@@ -4870,6 +4874,7 @@ function GrokBridgePanel({
           action: "proxy-search",
           apiKey,
           model: latestConfig.model,
+          endpoint: latestConfig.endpoint,
           locale,
           prompt,
         }),

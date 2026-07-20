@@ -14,6 +14,7 @@ type GrokRequest = {
   locale?: "zh-CN" | "en";
   apiKey?: string;
   model?: string;
+  endpoint?: string;
   prompt?: string;
   profileUrl?: string;
 };
@@ -322,7 +323,7 @@ export async function POST(request: Request) {
     }
 
     const structuredPrompt = buildStructuredGrokSignalPrompt(prompt, body.locale);
-    const proxyRequest = buildCodeProxyMessageRequest({ prompt: structuredPrompt, model });
+    const proxyRequest = buildCodeProxyMessageRequest({ prompt: structuredPrompt, model, endpoint: body.endpoint ?? process.env.CODEPROXY_GROK_ENDPOINT });
     const requestBody = JSON.stringify(proxyRequest.body);
     const startedAt = Date.now();
     const controller = new AbortController();

@@ -7,6 +7,8 @@ const require = createRequire(import.meta.url);
 const {
   AI_RESPONSE_CONFIG_STORAGE_KEY,
   CODEPROXY_BASE_URL,
+  DEFAULT_AI_RESPONSE_ENDPOINT,
+  DEFAULT_GROK_PROXY_ENDPOINT,
   DEFAULT_AI_RESPONSE_MODEL,
   DEFAULT_GROK_PROXY_MODEL,
   GROK_PROXY_CONFIG_STORAGE_KEY,
@@ -17,6 +19,7 @@ const {
   extractXUsername,
   normalizeGrokProxyConfig,
   normalizeAiResponseConfig,
+  normalizeApiEndpoint,
   normalizeXProfileConfig,
   normalizeXProfileUrl,
   extractCodeProxyMessageText,
@@ -28,6 +31,7 @@ test("normalizeGrokProxyConfig migrates old default model", () => {
   assert.equal(GROK_PROXY_CONFIG_STORAGE_KEY, "ray-growth-os:grok-proxy-config:v1");
   assert.equal(config.apiKey, "sk-test");
   assert.equal(config.model, "grok-4.3-fast");
+  assert.equal(config.endpoint, "https://codeproxy.dev/v1/messages");
 });
 test("normalizeAiResponseConfig stores GPT-5.5 codeproxy settings", () => {
   const config = normalizeAiResponseConfig({ apiKey: "sk-ai", model: "" });
@@ -36,6 +40,16 @@ test("normalizeAiResponseConfig stores GPT-5.5 codeproxy settings", () => {
   assert.equal(DEFAULT_AI_RESPONSE_MODEL, "gpt-5.5");
   assert.equal(config.apiKey, "sk-ai");
   assert.equal(config.model, "gpt-5.5");
+  assert.equal(config.endpoint, "https://codeproxy.dev/v1/responses");
+});
+
+test("proxy configs preserve valid custom request endpoints and reject unsafe URLs", () => {
+  assert.equal(DEFAULT_GROK_PROXY_ENDPOINT, "https://codeproxy.dev/v1/messages");
+  assert.equal(DEFAULT_AI_RESPONSE_ENDPOINT, "https://codeproxy.dev/v1/responses");
+  assert.equal(normalizeGrokProxyConfig({ endpoint: "http://127.0.0.1:4000/v1/messages/" }).endpoint, "http://127.0.0.1:4000/v1/messages");
+  assert.equal(normalizeAiResponseConfig({ endpoint: "https://api.example.com/v1/responses" }).endpoint, "https://api.example.com/v1/responses");
+  assert.equal(normalizeApiEndpoint("file:///tmp/key", DEFAULT_AI_RESPONSE_ENDPOINT), DEFAULT_AI_RESPONSE_ENDPOINT);
+  assert.equal(normalizeApiEndpoint("https://user:secret@example.com/v1/responses", DEFAULT_AI_RESPONSE_ENDPOINT), DEFAULT_AI_RESPONSE_ENDPOINT);
 });
 
 test("normalizeXProfileConfig stores a normalized public X homepage", () => {
@@ -54,6 +68,16 @@ test("buildCodeProxyMessageRequest creates a NewAPI messages request for codepro
   assert.equal(request.body.model, "grok-4");
   assert.equal(request.body.max_tokens, 1800);
   assert.deepEqual(request.body.messages, [{ role: "user", content: "find X leads" }]);
+});
+
+test("buildCodeProxyMessageRequest uses the configured Grok request endpoint", () => {
+  const request = buildCodeProxyMessageRequest({
+    prompt: "find X leads",
+    model: "grok-4.3-fast",
+    endpoint: "https://proxy.example.com/custom/messages",
+  });
+
+  assert.equal(request.url, "https://proxy.example.com/custom/messages");
 });
 
 test("DEFAULT_GROK_PROXY_MODEL uses grok-4.3-fast", () => {

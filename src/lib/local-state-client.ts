@@ -11,8 +11,8 @@ export type LocalStateScope = "settings" | "workbench";
 
 export type SharedSettings = {
   version: 1;
-  grok: { apiKey: string; model: string };
-  ai: { apiKey: string; model: string };
+  grok: { apiKey: string; model: string; endpoint: string };
+  ai: { apiKey: string; model: string; endpoint: string };
   xProfile: { profileUrl: string };
 };
 
