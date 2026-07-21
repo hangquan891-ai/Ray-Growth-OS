@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MouseEvent as ReactMouseEvent, type ReactNode, type SetStateAction } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   Activity,
@@ -19,6 +20,7 @@ import {
   Home as HomeIcon,
   Lightbulb,
   Loader2,
+  MessageCircle,
   MessageSquareText,
   Quote,
   Radar,
@@ -2442,10 +2444,12 @@ export default function Home() {
 
 function DashboardSidebar({ activeTab, setActiveTab }: { activeTab: DashboardTab; setActiveTab: Dispatch<SetStateAction<DashboardTab>> }) {
   const { locale, t } = useI18n();
+  const [contactOpen, setContactOpen] = useState(false);
   const tabs = localizedDashboardTabs(locale);
   const workflowTabs = tabs.filter((tab) => tab.value !== "account");
   const insightTabs = tabs.filter((tab) => tab.value === "account");
   return (
+    <>
     <aside className="group/sidebar relative z-20 hidden h-screen w-16 shrink-0 overflow-hidden border-r border-white/[0.08] bg-[#08090d]/95 pl-3 pr-2 pb-20 backdrop-blur-xl transition-[width] duration-300 ease-out hover:w-44 md:flex md:flex-col md:items-start md:gap-2 md:pt-4">
       <div className="grid h-10 w-10 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.045] text-white transition-transform duration-200 hover:scale-105 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125">
         <Command className="h-5 w-5" />
@@ -2465,6 +2469,16 @@ function DashboardSidebar({ activeTab, setActiveTab }: { activeTab: DashboardTab
         </div>
       </nav>
       <div className="mt-auto mb-4 grid gap-2">
+        <button
+          type="button"
+          onClick={() => setContactOpen(true)}
+          aria-label={locale === "en" ? "Contact me" : "联系我"}
+          title={locale === "en" ? "Contact me" : "联系我"}
+          className="flex h-10 w-10 items-center justify-center gap-3 overflow-hidden rounded-lg border border-emerald-300/15 bg-emerald-400/[0.06] px-0 text-emerald-100/70 transition-all duration-200 hover:scale-105 hover:border-emerald-200/30 hover:bg-emerald-400/12 hover:text-emerald-100 active:scale-95 group-hover/sidebar:w-36 group-hover/sidebar:justify-start group-hover/sidebar:px-3 [&_svg]:shrink-0 [&_svg]:transition-transform [&_svg]:duration-200 hover:[&_svg]:scale-125 active:[&_svg]:scale-110"
+        >
+          <MessageCircle className="h-5 w-5" />
+          <span className="hidden min-w-0 truncate text-sm font-bold opacity-0 transition-opacity duration-200 group-hover/sidebar:block group-hover/sidebar:opacity-100">{locale === "en" ? "Contact me" : "联系我"}</span>
+        </button>
         <Link
           href="/help"
           aria-label={locale === "en" ? "Help" : "帮助"}
@@ -2485,6 +2499,8 @@ function DashboardSidebar({ activeTab, setActiveTab }: { activeTab: DashboardTab
         </Link>
       </div>
     </aside>
+    <ContactMeDialog open={contactOpen} onClose={() => setContactOpen(false)} />
+    </>
   );
 }
 
@@ -2517,9 +2533,11 @@ function SidebarTabButton({
 
 function MobileDashboardNav({ activeTab, setActiveTab }: { activeTab: DashboardTab; setActiveTab: Dispatch<SetStateAction<DashboardTab>> }) {
   const { locale } = useI18n();
+  const [contactOpen, setContactOpen] = useState(false);
   const tabs = localizedDashboardTabs(locale);
   return (
-    <nav className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-5 rounded-lg border border-white/[0.08] bg-[#08090d]/90 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl md:hidden">
+    <>
+    <nav className="fixed inset-x-3 bottom-3 z-50 grid grid-cols-6 rounded-lg border border-white/[0.08] bg-[#08090d]/90 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl md:hidden">
       {tabs.map((tab) => (
         <button
           key={tab.value}
@@ -2540,7 +2558,58 @@ function MobileDashboardNav({ activeTab, setActiveTab }: { activeTab: DashboardT
         <CircleHelp className="h-5 w-5" />
         <span className="mt-1 leading-none">{locale === "en" ? "Help" : "帮助"}</span>
       </Link>
+      <button
+        type="button"
+        onClick={() => setContactOpen(true)}
+        className="grid h-[3.25rem] place-items-center rounded-md px-1 text-[10px] font-semibold text-emerald-100/70 transition-all duration-200 hover:bg-emerald-400/[0.06]"
+        aria-label={locale === "en" ? "Contact me" : "联系我"}
+      >
+        <MessageCircle className="h-5 w-5" />
+        <span className="mt-1 leading-none">{locale === "en" ? "Contact" : "联系"}</span>
+      </button>
     </nav>
+    <ContactMeDialog open={contactOpen} onClose={() => setContactOpen(false)} />
+    </>
+  );
+}
+
+function ContactMeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { locale } = useI18n();
+  const tr = (zh: string, en: string) => (locale === "en" ? en : zh);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[110] grid place-items-center overflow-y-auto bg-black/75 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="contact-me-title">
+      <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label={tr("关闭联系窗口", "Close contact dialog")} />
+      <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-blue-300/20 bg-[#0b0d12] text-white shadow-2xl shadow-black/60">
+        <button type="button" onClick={onClose} aria-label={tr("关闭", "Close")} className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-black/35 text-white/60 backdrop-blur-sm transition-colors hover:bg-white/[0.1] hover:text-white">
+          <X className="h-4 w-4" />
+        </button>
+        <div className="border-b border-white/[0.08] bg-blue-400/[0.06] px-5 py-5 sm:px-6">
+          <Badge variant="outline" className="rounded-md border-emerald-300/20 bg-emerald-400/10 text-emerald-100">
+            <MessageCircle className="mr-1 h-3.5 w-3.5" /> {tr("联系作者", "Contact the author")}
+          </Badge>
+          <h2 id="contact-me-title" className="mt-3 text-2xl font-black">{tr("微信扫码联系我", "Scan to contact me on WeChat")}</h2>
+          <p className="mt-2 pr-8 text-sm leading-6 text-white/50">{tr("欢迎交流使用问题、反馈建议、合作与项目赞助。", "Questions, feedback, partnerships, and project sponsorships are welcome.")}</p>
+        </div>
+        <div className="p-5 sm:p-6">
+          <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white p-3">
+            <Image src="/contact-wechat.jpg" alt={tr("联系作者的微信二维码", "WeChat QR code to contact the author")} width={958} height={766} className="h-auto w-full" priority />
+          </div>
+          <p className="mt-4 text-center text-xs leading-5 text-white/40">{tr("请使用微信扫描二维码添加好友", "Scan this QR code with WeChat to add the author")}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 

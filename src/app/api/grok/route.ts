@@ -19,7 +19,7 @@ type GrokRequest = {
   profileUrl?: string;
 };
 
-const GROK_PROXY_TIMEOUT_MS = 60000;
+const GROK_PROXY_TIMEOUT_MS = 90000;
 
 function saveGrokDiagnostic(input: Parameters<typeof recordAiDiagnostic>[0]) {
   try {
